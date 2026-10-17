@@ -227,13 +227,240 @@ namespace XRay
             return Fvector(0, 0, 0);
         }
 
+        // Raycast Visibility Check using native X-Ray CObjectSpace::RayTest
+        static bool IsVisible(const Fvector& from, const Fvector& to, CObject* pIgnore = nullptr)
+        {
+            CLevel* pLevel = GetLevel();
+            if (!pLevel) return true;
+
+            uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
+            void* pObjectSpace = reinterpret_cast<void*>(lvlAddr + 0xCC);
+            if (!pObjectSpace || IsBadReadPtr(pObjectSpace, sizeof(void*)))
+                return true;
+
+            if (!s_fnRayTest)
+            {
+                HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
+                if (h3DA)
+                {
+                    s_fnRayTest = reinterpret_cast<tRayTest>(GetProcAddress(h3DA,
+                        "?RayTest@CObjectSpace@@QAEHABU?$_vector3@M@@0MW4rq_target@collide@@PAUray_cache@4@PAVCObject@@@Z"));
+                    if (!s_fnRayTest)
+                    {
+                        s_fnRayTest = reinterpret_cast<tRayTest>(reinterpret_cast<uintptr_t>(h3DA) + 0x4E300);
+                    }
+                }
+            }
+
+            if (!s_fnRayTest) return true;
+
+            Fvector dir = to - from;
+            float dist = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+            if (dist <= 0.4f) return true;
+
+            float invDist = 1.0f / dist;
+            Fvector dirNorm(dir.x * invDist, dir.y * invDist, dir.z * invDist);
+
+            // Stop 0.35m before the target bone so the ray doesn't collide with the enemy's own weapon/model
+            float testDist = (dist > 0.5f) ? (dist - 0.35f) : (dist * 0.5f);
+
+            __try
+            {
+                // rqtStatic = 2: Only solid world geometry (walls, terrain, buildings) blocks LOS.
+                // Dynamic bushes, foliage, leaves, weapons, and ragdolls will NOT falsely block visibility!
+                BOOL bBlocked = s_fnRayTest(pObjectSpace, from, dirNorm, testDist, 2, nullptr, pIgnore);
+                return (bBlocked == FALSE);
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return true;
+            }
+        }
+
+        // Extract accurate world-space position of bone (Head, Neck, Chest, Pelvis) with crouch support
+        static bool GetBoneWorldPosition(CObject* pObj, int boneTargetType, Fvector& outWorldPos)
+        {
+            if (!pObj) return false;
+
+            __try
+            {
+                uintptr_t objAddr = reinterpret_cast<uintptr_t>(pObj);
+                uintptr_t visual = *reinterpret_cast<uintptr_t*>(objAddr + 0x90);
+                if (!visual || IsBadReadPtr(reinterpret_cast<void*>(visual), sizeof(void*)))
+                    return false;
+
+                void** vtbl = *reinterpret_cast<void***>(visual);
+                if (!vtbl || IsBadReadPtr(vtbl, sizeof(void*) * 8))
+                    return false;
+
+                typedef void* (__thiscall* t_dcast_PKinematics)(void* thisPtr);
+                auto dcast = reinterpret_cast<t_dcast_PKinematics>(vtbl[6]);
+                void* pKinematics = dcast(reinterpret_cast<void*>(visual));
+                if (!pKinematics || IsBadReadPtr(pKinematics, 0xA0))
+                    return false;
+
+                uintptr_t kAddr = reinterpret_cast<uintptr_t>(pKinematics);
+                uintptr_t boneInstances = *reinterpret_cast<uintptr_t*>(kAddr + 0x84);
+                if (!boneInstances || IsBadReadPtr(reinterpret_cast<void*>(boneInstances), sizeof(CBoneInstance)))
+                    return false;
+
+                if (!s_fnLL_BoneID)
+                {
+                    HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
+                    if (h3DA)
+                    {
+                        s_fnLL_BoneID = reinterpret_cast<tLL_BoneID>(GetProcAddress(h3DA,
+                            "?LL_BoneID@CKinematics@@QAEGPBD@Z"));
+                        if (!s_fnLL_BoneID)
+                        {
+                            s_fnLL_BoneID = reinterpret_cast<tLL_BoneID>(reinterpret_cast<uintptr_t>(h3DA) + 0x6C6E0);
+                        }
+                    }
+                }
+
+                uint16_t boneId = 0xFFFF;
+                if (s_fnLL_BoneID)
+                {
+                    const char* boneName = "bip01_head";
+                    if (boneTargetType == 1) boneName = "bip01_neck";
+                    else if (boneTargetType == 2) boneName = "bip01_spine2";
+                    else if (boneTargetType == 3) boneName = "bip01_pelvis";
+
+                    boneId = s_fnLL_BoneID(pKinematics, boneName);
+
+                    // Fallbacks for mutants / non-standard rigs
+                    if (boneId == 0xFFFF)
+                    {
+                        if (boneTargetType <= 1) boneId = s_fnLL_BoneID(pKinematics, "head");
+                        if (boneId == 0xFFFF) boneId = s_fnLL_BoneID(pKinematics, "bip01_spine1");
+                        if (boneId == 0xFFFF) boneId = s_fnLL_BoneID(pKinematics, "bip01_spine");
+                    }
+                }
+
+                if (boneId != 0xFFFF && boneId < 128)
+                {
+                    float lx = *reinterpret_cast<float*>(boneInstances + boneId * 0xA0 + 0x30);
+                    float ly = *reinterpret_cast<float*>(boneInstances + boneId * 0xA0 + 0x34);
+                    float lz = *reinterpret_cast<float*>(boneInstances + boneId * 0xA0 + 0x38);
+
+                    Fvector localBone(lx, ly, lz);
+                    pObj->render_transform.Transform(outWorldPos, localBone);
+                    return true;
+                }
+
+                // If bone ID lookup failed, find the highest bone in local Y (head)
+                uintptr_t pBoneDataVec = *reinterpret_cast<uintptr_t*>(kAddr + 0x88);
+                if (pBoneDataVec && !IsBadReadPtr(reinterpret_cast<void*>(pBoneDataVec), 0x10))
+                {
+                    CBoneData** boneDataFirst = *reinterpret_cast<CBoneData***>(pBoneDataVec + 0x04);
+                    CBoneData** boneDataLast = *reinterpret_cast<CBoneData***>(pBoneDataVec + 0x08);
+                    if (boneDataFirst && boneDataLast && boneDataLast > boneDataFirst)
+                    {
+                        size_t count = boneDataLast - boneDataFirst;
+                        if (count > 0 && count <= 128)
+                        {
+                            size_t bestIdx = 0;
+                            float maxLy = -1e6f;
+                            for (size_t i = 0; i < count; ++i)
+                            {
+                                float ly = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x34);
+                                if (ly > maxLy)
+                                {
+                                    maxLy = ly;
+                                    bestIdx = i;
+                                }
+                            }
+
+                            float lx = *reinterpret_cast<float*>(boneInstances + bestIdx * 0xA0 + 0x30);
+                            float ly = *reinterpret_cast<float*>(boneInstances + bestIdx * 0xA0 + 0x34);
+                            float lz = *reinterpret_cast<float*>(boneInstances + bestIdx * 0xA0 + 0x38);
+
+                            Fvector localBone(lx, ly, lz);
+                            pObj->render_transform.Transform(outWorldPos, localBone);
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return false;
+            }
+        }
+
+        static uintptr_t GetEnvironment()
+        {
+            HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
+            if (!h3DA) return 0;
+
+            static void** ppPersistent = nullptr;
+            if (!ppPersistent)
+            {
+                ppPersistent = reinterpret_cast<void**>(GetProcAddress(h3DA, "?g_pGamePersistent@@3PAVIGame_Persistent@@A"));
+                if (!ppPersistent)
+                    ppPersistent = reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(h3DA) + 0x10BB7C);
+            }
+
+            if (!ppPersistent || !*ppPersistent || IsBadReadPtr(*ppPersistent, sizeof(void*)))
+                return 0;
+
+            uintptr_t pPersistent = reinterpret_cast<uintptr_t>(*ppPersistent);
+            if (IsBadReadPtr(reinterpret_cast<void*>(pPersistent), 0x500))
+                return 0;
+
+            uintptr_t pEnv = *reinterpret_cast<uintptr_t*>(pPersistent + 0x46C);
+            if (!pEnv || IsBadReadPtr(reinterpret_cast<void*>(pEnv), 0x300))
+                return 0;
+
+            return pEnv;
+        }
+
+        static void SetGameTime(float gameTimeSeconds, float timeFactor = 1.0f)
+        {
+            uintptr_t pEnv = GetEnvironment();
+            if (!pEnv) return;
+
+            typedef void (__thiscall* tSetGameTime)(void* thisPtr, float time, float factor);
+            static tSetGameTime s_fnSetGameTime = nullptr;
+
+            if (!s_fnSetGameTime)
+            {
+                HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
+                if (h3DA)
+                {
+                    s_fnSetGameTime = reinterpret_cast<tSetGameTime>(GetProcAddress(h3DA,
+                        "?SetGameTime@CEnvironment@@QAEXMM@Z"));
+                    if (!s_fnSetGameTime)
+                        s_fnSetGameTime = reinterpret_cast<tSetGameTime>(reinterpret_cast<uintptr_t>(h3DA) + 0x38730);
+                }
+            }
+
+            if (s_fnSetGameTime)
+            {
+                __try
+                {
+                    s_fnSetGameTime(reinterpret_cast<void*>(pEnv), gameTimeSeconds, timeFactor);
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                }
+            }
+        }
+
     private:
         typedef uint32_t(__thiscall* tCObjectList_o_count)(void* thisPtr);
         typedef CObject*(__thiscall* tCObjectList_o_get_by_iterator)(void* thisPtr, uint32_t index);
+        typedef BOOL(__thiscall* tRayTest)(void* thisPtr, const Fvector& start, const Fvector& dir, float range,
+                                           int rqTarget, void* pRayCache, CObject* pIgnoreObj);
+        typedef uint16_t(__thiscall* tLL_BoneID)(void* thisPtr, const char* boneName);
 
         static inline CRenderDevice* s_pDevice = nullptr;
         static inline CLevel** s_ppGameLevel = nullptr;
         static inline tCObjectList_o_count s_fnObjList_o_count = nullptr;
         static inline tCObjectList_o_get_by_iterator s_fnObjList_o_get_by_iterator = nullptr;
+        static inline tRayTest s_fnRayTest = nullptr;
+        static inline tLL_BoneID s_fnLL_BoneID = nullptr;
     };
 }

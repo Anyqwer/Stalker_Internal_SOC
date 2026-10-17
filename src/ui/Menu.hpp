@@ -10,8 +10,9 @@ namespace UI
 
     private:
         static void RenderVisualsTab();
+        static void RenderChamsTab();
         static void RenderAimbotTab();
-        static void RenderMiscTab();
+        static void RenderTrainersTab();
         static void RenderWorldTab();
         static void RenderSettingsTab();
     };

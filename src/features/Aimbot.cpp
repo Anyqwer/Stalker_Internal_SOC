@@ -81,7 +81,8 @@ namespace Features
         XRay::Fvector2 screenCenter(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 
         XRay::CObject* pBestObj = nullptr;
-        float bestFovDistance = g_Config.aimbot.fFov;
+        float bestMetric = 1e6f;
+        XRay::Fvector camPos = XRay::Engine::GetCameraPosition();
 
         auto CheckCandidate = [&](XRay::CObject* pObj)
         {
@@ -95,21 +96,63 @@ namespace Features
 
             if (posX == 0.0f && posY == 0.0f && posZ == 0.0f) return;
 
-            float targetHeight = 1.65f;
-            if (!IsValidAimbotTarget(objAddr, pObj, pActor, targetHeight))
+            float defaultHeight = 1.65f;
+            if (!IsValidAimbotTarget(objAddr, pObj, pActor, defaultHeight))
                 return;
 
-            XRay::Fvector targetWorld(posX, posY + targetHeight, posZ);
-            XRay::Fvector2 screenPos;
+            // Extract dynamic bone world position with multi-bone visibility fallback
+            XRay::Fvector targetWorld;
+            bool bFoundVisibleBone = false;
 
+            if (g_Config.aimbot.bVisCheck)
+            {
+                // Prioritize user-chosen bone, then fallback to chest, neck, pelvis
+                int bonesToCheck[4] = { g_Config.aimbot.iTargetBone, 2, 1, 3 };
+                for (int b = 0; b < 4; ++b)
+                {
+                    int boneId = bonesToCheck[b];
+                    XRay::Fvector bonePos;
+                    if (XRay::Engine::GetBoneWorldPosition(pObj, boneId, bonePos))
+                    {
+                        if (XRay::Engine::IsVisible(camPos, bonePos, pActor))
+                        {
+                            targetWorld = bonePos;
+                            bFoundVisibleBone = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!bFoundVisibleBone)
+                    return; // Completely occluded behind solid static walls
+            }
+            else
+            {
+                if (!XRay::Engine::GetBoneWorldPosition(pObj, g_Config.aimbot.iTargetBone, targetWorld))
+                {
+                    targetWorld = XRay::Fvector(posX, posY + defaultHeight, posZ);
+                }
+            }
+
+            XRay::Fvector2 screenPos;
             if (XRay::Math::WorldToScreen(targetWorld, screenPos))
             {
                 float distFromCrosshair = XRay::Math::GetDistance2D(screenCenter, screenPos);
-                if (distFromCrosshair < bestFovDistance)
+                if (distFromCrosshair <= g_Config.aimbot.fFov)
                 {
-                    bestFovDistance = distFromCrosshair;
-                    pBestObj = pObj;
-                    outTargetScreenPos = screenPos;
+                    float metric = distFromCrosshair;
+                    if (g_Config.aimbot.iTargetPriority == 1) // Distance priority
+                    {
+                        XRay::Fvector diff = targetWorld - camPos;
+                        metric = std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
+                    }
+
+                    if (metric < bestMetric)
+                    {
+                        bestMetric = metric;
+                        pBestObj = pObj;
+                        outTargetScreenPos = screenPos;
+                    }
                 }
             }
         };
@@ -148,34 +191,92 @@ namespace Features
 
     void Aimbot::Update()
     {
-        if (!g_Config.aimbot.bEnabled) return;
-
-        // Check if aiming key (Right Mouse Button) is pressed
-        if (!(GetAsyncKeyState(VK_RBUTTON) & 0x8000))
-            return;
-
         // Don't aim while in menu
         if (g_Config.bShowMenu) return;
 
-        XRay::Fvector2 targetScreen;
-        XRay::CObject* pTarget = FindBestTarget(targetScreen);
+        ImGuiIO& io = ImGui::GetIO();
+        float centerX = io.DisplaySize.x * 0.5f;
+        float centerY = io.DisplaySize.y * 0.5f;
+        XRay::Fvector2 screenCenter(centerX, centerY);
 
-        if (pTarget)
+        // 1. AIMBOT
+        if (g_Config.aimbot.bEnabled)
         {
-            ImGuiIO& io = ImGui::GetIO();
-            float centerX = io.DisplaySize.x * 0.5f;
-            float centerY = io.DisplaySize.y * 0.5f;
+            int aimKey = g_Config.aimbot.bindKey.vk_code != 0 ? g_Config.aimbot.bindKey.vk_code : VK_RBUTTON;
+            if (GetAsyncKeyState(aimKey) & 0x8000)
+            {
+                XRay::Fvector2 targetScreen;
+                XRay::CObject* pTarget = FindBestTarget(targetScreen);
 
-            float deltaX = targetScreen.x - centerX;
-            float deltaY = targetScreen.y - centerY;
+                if (pTarget)
+                {
+                    float deltaX = targetScreen.x - centerX;
+                    float deltaY = targetScreen.y - centerY;
 
-            // Apply smoothing
-            float smooth = (g_Config.aimbot.fSmoothness > 1.0f) ? g_Config.aimbot.fSmoothness : 1.0f;
-            deltaX /= smooth;
-            deltaY /= smooth;
+                    // Apply smoothing
+                    float smooth = (g_Config.aimbot.fSmoothness > 1.0f) ? g_Config.aimbot.fSmoothness : 1.0f;
+                    deltaX /= smooth;
+                    deltaY /= smooth;
 
-            // Send relative mouse movement to guide crosshair to target
-            mouse_event(MOUSEEVENTF_MOVE, static_cast<DWORD>(deltaX), static_cast<DWORD>(deltaY), 0, 0);
+                    // Send relative mouse movement to guide crosshair to target
+                    mouse_event(MOUSEEVENTF_MOVE, static_cast<DWORD>(deltaX), static_cast<DWORD>(deltaY), 0, 0);
+                }
+            }
+        }
+
+        // 2. TRIGGERBOT
+        if (g_Config.aimbot.bTriggerbot)
+        {
+            bool triggerActive = g_Config.aimbot.bTriggerbotAlways;
+            if (!triggerActive && g_Config.aimbot.keyTriggerbot.vk_code != 0)
+            {
+                triggerActive = (GetAsyncKeyState(g_Config.aimbot.keyTriggerbot.vk_code) & 0x8000) != 0;
+            }
+
+            if (triggerActive)
+            {
+                XRay::Fvector2 targetScreen;
+                XRay::CObject* pTarget = FindBestTarget(targetScreen);
+
+                if (pTarget)
+                {
+                    // Check if target bone is closely aligned with crosshair
+                    float distFromCenter = XRay::Math::GetDistance2D(screenCenter, targetScreen);
+                    bool shouldFire = (distFromCenter <= 20.0f);
+
+                    // Check other vital bones as well (Head, Chest, Pelvis) in case enemy is partially exposed
+                    if (!shouldFire)
+                    {
+                        int checkBones[3] = { 0, 2, 3 }; // Head, Chest, Pelvis
+                        for (int b : checkBones)
+                        {
+                            XRay::Fvector bWorld;
+                            XRay::Fvector2 bScreen;
+                            if (XRay::Engine::GetBoneWorldPosition(pTarget, b, bWorld) &&
+                                XRay::Math::WorldToScreen(bWorld, bScreen))
+                            {
+                                if (XRay::Math::GetDistance2D(screenCenter, bScreen) <= 20.0f)
+                                {
+                                    shouldFire = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (shouldFire)
+                    {
+                        static ULONGLONG s_lastTriggerTime = 0;
+                        ULONGLONG now = GetTickCount64();
+                        if (now - s_lastTriggerTime >= static_cast<ULONGLONG>(g_Config.aimbot.fTriggerbotDelay))
+                        {
+                            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+                            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+                            s_lastTriggerTime = now;
+                        }
+                    }
+                }
+            }
         }
     }
 }

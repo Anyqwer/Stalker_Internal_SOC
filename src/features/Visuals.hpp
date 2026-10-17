@@ -20,6 +20,14 @@ namespace Features
         static void DrawFovCircle(float fovRadius, ImU32 color);
         static void DrawCustomCrosshair(ImU32 color);
 
+        // Bone skeleton rendering & dynamic bounding box calculation
+        static bool DrawSkeletonAndGetBounds(XRay::CObject* pObj, ImDrawList* pDrawList, ImU32 color,
+                                             float& outMinX, float& outMinY, float& outMaxX, float& outMaxY);
+
+        // Anomaly rendering
+        static void RenderAnomaly(XRay::CObject* pObj, ImDrawList* pDrawList, const XRay::Fvector& origin,
+                                  float distance, const char* sectName);
+
         // Object processing
         static void ProcessObject(XRay::CObject* pObj, ImDrawList* pDrawList, const XRay::Fvector& localPos);
     };

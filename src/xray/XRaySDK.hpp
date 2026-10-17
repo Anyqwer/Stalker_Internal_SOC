@@ -78,6 +78,29 @@ namespace XRay
         Fmatrix mFullTransform;         // 0x2BC
     };
 
+    // Bone kinematics data
+    struct CBoneInstance
+    {
+        Fmatrix mTransform;             // 0x00: Local bone transformation matrix (64 bytes)
+        uint8_t pad_bone[0x60];         // 0x40 -> 0xA0 (Total sizeof = 160 bytes)
+    };
+
+    struct CBoneData
+    {
+        uint16_t bone_id;               // 0x00
+        uint16_t pad02;                 // 0x02
+        uint16_t pad04;                 // 0x04
+        uint16_t parent_id;             // 0x06: Parent bone ID (0xFFFF = root / no parent)
+    };
+
+    struct CKinematics
+    {
+        void* vfptr;                    // 0x00: Virtual method table
+        uint8_t pad04[0x80];            // 0x04 -> 0x84
+        CBoneInstance* bone_instances;  // 0x84: Array of bone instances
+        xr_vector<CBoneData*> bone_datas; // 0x88: Vector of bone descriptors
+    };
+
     // Basic game object in X-Ray (1.0006 retail verified layout)
     struct CObject
     {
@@ -86,7 +109,8 @@ namespace XRay
         uint64_t cls_id;                // 0x08: CLS_ID (64-bit)
         uint8_t pad_0010[0x40];         // 0x10 -> 0x50
         Fmatrix render_transform;       // 0x50: Object transformation matrix (XFORM)
-        uint8_t pad_0090[0x14];         // 0x90 -> 0xA4
+        void* pVisual;                  // 0x90: IRender_Visual pointer
+        uint8_t pad_0094[0x10];         // 0x94 -> 0xA4
         uint16_t ID;                    // 0xA4: Object net ID
         uint16_t ID_pad2;               // 0xA6:
         uintptr_t cName;                // 0xA8: shared_str (name)

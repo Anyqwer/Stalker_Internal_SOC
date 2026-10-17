@@ -13,7 +13,8 @@ namespace Hooks
         {
             Reset = 16,
             Present = 17,
-            EndScene = 42
+            EndScene = 42,
+            DrawIndexedPrimitive = 82
         };
 
         // Create a dummy device to extract the real VMT pointers

@@ -46,7 +46,10 @@ namespace Hooks
         // Toggle menu on user-defined key (default VK_INSERT)
         if (uMsg == WM_KEYDOWN)
         {
-            if (wParam == static_cast<WPARAM>(g_Config.settings.iMenuKey))
+            int menuKey = g_Config.settings.keyMenu.vk_code != 0 ? g_Config.settings.keyMenu.vk_code : VK_INSERT;
+            int unloadKey = g_Config.settings.keyUnload.vk_code != 0 ? g_Config.settings.keyUnload.vk_code : VK_END;
+
+            if (wParam == static_cast<WPARAM>(menuKey))
             {
                 g_Config.bShowMenu = !g_Config.bShowMenu;
                 if (g_Config.bShowMenu)
@@ -55,7 +58,7 @@ namespace Hooks
                 }
                 return 0;
             }
-            else if (wParam == static_cast<WPARAM>(g_Config.settings.iUnloadKey))
+            else if (wParam == static_cast<WPARAM>(unloadKey))
             {
                 Core::Logger::Warning("Unload key pressed! Initiating DLL eject...");
                 Core::g_bUnloadRequested.store(true);

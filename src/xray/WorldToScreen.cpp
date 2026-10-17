@@ -33,9 +33,9 @@ namespace XRay
         screenPos.x = (ndcX * 0.5f + 0.5f) * screenWidth;
         screenPos.y = (-ndcY * 0.5f + 0.5f) * screenHeight;
 
-        // Allow slightly off-screen points for smooth box drawing
-        return (screenPos.x >= -300.0f && screenPos.x <= screenWidth + 300.0f &&
-                screenPos.y >= -300.0f && screenPos.y <= screenHeight + 300.0f);
+        // Allow generous off-screen range so bone connections, boxes and snaplines don't pop/cut off
+        return (screenPos.x >= -3000.0f && screenPos.x <= screenWidth + 3000.0f &&
+                screenPos.y >= -3000.0f && screenPos.y <= screenHeight + 3000.0f);
     }
 
     bool Math::WorldToScreen(const Fvector& worldPos, Fvector2& screenPos)

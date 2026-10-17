@@ -7,6 +7,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 
 namespace Features
 {
@@ -46,7 +47,7 @@ namespace Features
         }
         else
         {
-            // Full box with black outline
+            // Full box with black outlines for high contrast
             pDrawList->AddRect(ImVec2(x - 1, y - 1), ImVec2(x + w + 1, y + h + 1), outline, 0.0f, 0, 1.5f);
             pDrawList->AddRect(ImVec2(x + 1, y + 1), ImVec2(x + w - 1, y + h - 1), outline, 0.0f, 0, 1.5f);
             pDrawList->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), color, 0.0f, 0, 1.5f);
@@ -114,6 +115,228 @@ namespace Features
         pDrawList->AddLine(ImVec2(cx, cy - size), ImVec2(cx, cy + size + 1), color, 1.5f);
     }
 
+    bool Visuals::DrawSkeletonAndGetBounds(XRay::CObject* pObj, ImDrawList* pDrawList, ImU32 color,
+                                           float& outMinX, float& outMinY, float& outMaxX, float& outMaxY)
+    {
+        if (!pObj) return false;
+
+        __try
+        {
+            uintptr_t objAddr = reinterpret_cast<uintptr_t>(pObj);
+            uintptr_t visual = *reinterpret_cast<uintptr_t*>(objAddr + 0x90);
+            if (!visual || IsBadReadPtr(reinterpret_cast<void*>(visual), sizeof(void*)))
+                return false;
+
+            void** vtbl = *reinterpret_cast<void***>(visual);
+            if (!vtbl || IsBadReadPtr(vtbl, sizeof(void*) * 8))
+                return false;
+
+            // VMT index 6 is dcast_PKinematics (index 5 is Spawn)
+            typedef void* (__thiscall* t_dcast_PKinematics)(void* thisPtr);
+            auto dcast = reinterpret_cast<t_dcast_PKinematics>(vtbl[6]);
+            void* pKinematics = dcast(reinterpret_cast<void*>(visual));
+            if (!pKinematics || IsBadReadPtr(pKinematics, 0x90))
+                return false;
+
+            uintptr_t kAddr = reinterpret_cast<uintptr_t>(pKinematics);
+            uintptr_t boneInstances = *reinterpret_cast<uintptr_t*>(kAddr + 0x84);
+            if (!boneInstances || IsBadReadPtr(reinterpret_cast<void*>(boneInstances), sizeof(XRay::CBoneInstance)))
+                return false;
+
+            // In X-Ray 1.0006 CKinematics:
+            // Offset 0x88 is a pointer to xr_vector<CBoneData*> (vecBones*)
+            // Inside the vector, +0x04 is _first and +0x08 is _last
+            uintptr_t pBoneDataVec = *reinterpret_cast<uintptr_t*>(kAddr + 0x88);
+            if (!pBoneDataVec || IsBadReadPtr(reinterpret_cast<void*>(pBoneDataVec), 0x10))
+                return false;
+
+            XRay::CBoneData** boneDataFirst = *reinterpret_cast<XRay::CBoneData***>(pBoneDataVec + 0x04);
+            XRay::CBoneData** boneDataLast = *reinterpret_cast<XRay::CBoneData***>(pBoneDataVec + 0x08);
+
+            if (!boneDataFirst || !boneDataLast || boneDataLast <= boneDataFirst)
+                return false;
+
+            size_t boneCount = boneDataLast - boneDataFirst;
+            if (boneCount == 0 || boneCount > 128)
+                return false;
+
+            struct ScreenBone
+            {
+                XRay::Fvector2 screenPos;
+                bool valid = false;
+            };
+            ScreenBone screenBones[128];
+
+            float minX = 1e6f, maxX = -1e6f;
+            float minY = 1e6f, maxY = -1e6f;
+            int validCount = 0;
+
+            for (size_t i = 0; i < boneCount; ++i)
+            {
+                // Each CBoneInstance is 0xA0 (160) bytes
+                // Transform matrix is at offset 0x00, position is row 4: _41, _42, _43 (offset 0x30, 0x34, 0x38)
+                float lx = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x30);
+                float ly = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x34);
+                float lz = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x38);
+
+                XRay::Fvector localBone(lx, ly, lz);
+                XRay::Fvector worldBone;
+                pObj->render_transform.Transform(worldBone, localBone);
+
+                XRay::Fvector2 screenPt;
+                if (XRay::Math::WorldToScreen(worldBone, screenPt))
+                {
+                    screenBones[i].screenPos = screenPt;
+                    screenBones[i].valid = true;
+                    validCount++;
+
+                    if (screenPt.x < minX) minX = screenPt.x;
+                    if (screenPt.x > maxX) maxX = screenPt.x;
+                    if (screenPt.y < minY) minY = screenPt.y;
+                    if (screenPt.y > maxY) maxY = screenPt.y;
+                }
+            }
+
+            if (validCount < 2)
+                return false;
+
+            // Draw bone connection lines if enabled
+            if (g_Config.visuals.bSkeleton)
+            {
+                ImU32 boneColor = color;
+                if (g_Config.visuals.bSkeletonVisibleCheck)
+                {
+                    XRay::Fvector camPos = XRay::Engine::GetCameraPosition();
+                    XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
+                    bool isVis = false;
+                    int checkBones[3] = { 0, 2, 3 }; // Head, Chest, Pelvis
+                    for (int b : checkBones)
+                    {
+                        XRay::Fvector bonePos;
+                        if (XRay::Engine::GetBoneWorldPosition(pObj, b, bonePos))
+                        {
+                            if (XRay::Engine::IsVisible(camPos, bonePos, pActor))
+                            {
+                                isVis = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    boneColor = isVis ? ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeletonVisible)
+                                      : ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeletonOccluded);
+                }
+
+                for (size_t i = 0; i < boneCount; ++i)
+                {
+                    if (!screenBones[i].valid) continue;
+
+                    XRay::CBoneData* pData = boneDataFirst[i];
+                    if (!pData || IsBadReadPtr(pData, sizeof(XRay::CBoneData))) continue;
+
+                    uint16_t parentId = pData->parent_id;
+                    if (parentId < boneCount && parentId != 0xFFFF && screenBones[parentId].valid)
+                    {
+                        pDrawList->AddLine(
+                            ImVec2(screenBones[i].screenPos.x, screenBones[i].screenPos.y),
+                            ImVec2(screenBones[parentId].screenPos.x, screenBones[parentId].screenPos.y),
+                            boneColor,
+                            1.5f
+                        );
+                    }
+                }
+            }
+
+            outMinX = minX;
+            outMinY = minY;
+            outMaxX = maxX;
+            outMaxY = maxY;
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    void Visuals::RenderAnomaly(XRay::CObject* pObj, ImDrawList* pDrawList, const XRay::Fvector& origin,
+                                float distance, const char* sectName)
+    {
+        if (!g_Config.visuals.bAnomalies) return;
+        if (distance > g_Config.visuals.fAnomalyDistance) return;
+
+        // Friendly anomaly name
+        const char* anomName = "Anomaly";
+        if (strstr(sectName, "mosquito_bald") || strstr(sectName, "bald")) anomName = "Springboard";
+        else if (strstr(sectName, "mincer")) anomName = "Whirligig";
+        else if (strstr(sectName, "gravi")) anomName = "Vortex";
+        else if (strstr(sectName, "galantine") || strstr(sectName, "witches")) anomName = "Electro";
+        else if (strstr(sectName, "zharka")) anomName = "Burner";
+        else if (strstr(sectName, "buzz")) anomName = "Fruit Punch";
+        else if (strstr(sectName, "radioactive")) anomName = "Radiation Zone";
+        else if (strstr(sectName, "teleport")) anomName = "Teleport";
+
+        ImU32 anomColor = ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colAnomaly);
+
+        // Draw 3D ground danger puddle (inspired by chitalka inferno puddle)
+        const int NUM_SEGMENTS = 24;
+        float radius = 2.8f;
+        ImVec2 screenPoints[NUM_SEGMENTS];
+        int validPts = 0;
+
+        for (int i = 0; i < NUM_SEGMENTS; ++i)
+        {
+            float angle = (i * 2.0f * 3.14159265f) / NUM_SEGMENTS;
+            XRay::Fvector pt = origin + XRay::Fvector(radius * std::cos(angle), 0.15f, radius * std::sin(angle));
+            XRay::Fvector2 spt;
+            if (XRay::Math::WorldToScreen(pt, spt))
+            {
+                screenPoints[validPts++] = ImVec2(spt.x, spt.y);
+            }
+        }
+
+        if (validPts >= 3)
+        {
+            ImVec4 fillVec = g_Config.visuals.colAnomaly;
+            fillVec.w *= 0.28f; // Translucent puddle fill like chitalka
+            ImU32 fillColor = ImGui::ColorConvertFloat4ToU32(fillVec);
+
+            pDrawList->AddConvexPolyFilled(screenPoints, validPts, fillColor);
+            pDrawList->AddPolyline(screenPoints, validPts, anomColor, ImDrawFlags_Closed, 2.0f);
+        }
+
+        // Draw center icon & distance label
+        XRay::Fvector2 centerScreen;
+        if (XRay::Math::WorldToScreen(origin + XRay::Fvector(0, 0.5f, 0), centerScreen))
+        {
+            char labelBuf[128];
+            snprintf(labelBuf, sizeof(labelBuf), "[!] %s (%.0fm)", anomName, distance);
+            ImVec2 textSize = ImGui::CalcTextSize(labelBuf);
+
+            ImVec2 badgePos(centerScreen.x - textSize.x * 0.5f - 4.0f, centerScreen.y - textSize.y * 0.5f - 2.0f);
+            pDrawList->AddRectFilled(
+                badgePos,
+                ImVec2(badgePos.x + textSize.x + 8.0f, badgePos.y + textSize.y + 4.0f),
+                IM_COL32(15, 15, 20, 200),
+                4.0f
+            );
+            pDrawList->AddRect(
+                badgePos,
+                ImVec2(badgePos.x + textSize.x + 8.0f, badgePos.y + textSize.y + 4.0f),
+                anomColor,
+                4.0f,
+                0,
+                1.0f
+            );
+
+            pDrawList->AddText(
+                ImVec2(badgePos.x + 4.0f, badgePos.y + 2.0f),
+                IM_COL32(255, 255, 255, 255),
+                labelBuf
+            );
+        }
+    }
+
     enum class EntityCategory
     {
         Unknown,
@@ -128,7 +351,8 @@ namespace Features
         Zombie,
         Mutant,
         Weapon,
-        Artifact
+        Artifact,
+        Anomaly
     };
 
     static EntityCategory ClassifyObject(uintptr_t objAddr, XRay::CObject* pObj, XRay::CObject* pActor,
@@ -155,6 +379,20 @@ namespace Features
         // Skip player if not already caught
         if (strstr(sectLower, "actor") || strstr(nameLower, "single_player"))
             return EntityCategory::Player;
+
+        // Anomalies check
+        if (strncmp(sectLower, "zone_", 5) == 0 ||
+            strstr(sectLower, "anomaly") ||
+            strstr(sectLower, "mosquito_bald") ||
+            strstr(sectLower, "mincer") ||
+            strstr(sectLower, "gravi_zone") ||
+            strstr(sectLower, "galantine") ||
+            strstr(sectLower, "zharka") ||
+            strstr(sectLower, "buzz") ||
+            strstr(sectLower, "radioactive"))
+        {
+            return EntityCategory::Anomaly;
+        }
 
         // 1. Mutants / Monsters
         if (strstr(visualLower, "monster") || strstr(visualLower, "mutant") ||
@@ -255,6 +493,13 @@ namespace Features
             if (category == EntityCategory::Unknown || category == EntityCategory::Player)
                 return;
 
+            // Handle Anomaly
+            if (category == EntityCategory::Anomaly)
+            {
+                RenderAnomaly(pObj, pDrawList, origin, distance, sectName);
+                return;
+            }
+
             float entityHeight = 1.8f;
             ImU32 boxColor = IM_COL32(255, 255, 255, 255);
             const char* typeTag = "Entity";
@@ -354,28 +599,54 @@ namespace Features
                 return;
             }
 
-            // Calculate 3D points
-            XRay::Fvector head = origin + XRay::Fvector(0.0f, entityHeight, 0.0f);
+            // Screen coordinates calculation
+            float boxX = 0, boxY = 0, boxW = 0, boxH = 0;
+            XRay::Fvector2 screenFeet;
+            bool bHasBox = false;
 
-            XRay::Fvector2 screenFeet, screenHead;
-            if (!XRay::Math::WorldToScreen(origin, screenFeet) || !XRay::Math::WorldToScreen(head, screenHead))
-                return;
+            // Try dynamic bone skeleton extraction first
+            if (isLiving)
+            {
+                float minX = 0, minY = 0, maxX = 0, maxY = 0;
+                ImU32 skelColor = ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeleton);
+                if (DrawSkeletonAndGetBounds(pObj, pDrawList, skelColor, minX, minY, maxX, maxY))
+                {
+                    float padX = (maxX - minX) * 0.12f + 4.0f;
+                    float padY = 6.0f;
+                    boxX = minX - padX;
+                    boxY = minY - padY;
+                    boxW = (maxX - minX) + padX * 2.0f;
+                    boxH = (maxY - minY) + padY * 2.0f;
+                    screenFeet = XRay::Fvector2(minX + (maxX - minX) * 0.5f, maxY);
+                    bHasBox = (boxH >= 4.0f);
+                }
+            }
 
-            float boxH = std::abs(screenFeet.y - screenHead.y);
-            if (boxH < 4.0f) return;
+            // Fallback to bounding cylinder if skeleton was unavailable
+            if (!bHasBox)
+            {
+                XRay::Fvector head = origin + XRay::Fvector(0.0f, entityHeight, 0.0f);
+                XRay::Fvector2 screenHead;
+                if (!XRay::Math::WorldToScreen(origin, screenFeet) || !XRay::Math::WorldToScreen(head, screenHead))
+                    return;
 
-            float boxW = boxH * 0.55f;
-            float boxX = screenHead.x - boxW * 0.5f;
-            float boxY = screenHead.y;
+                boxH = std::abs(screenFeet.y - screenHead.y);
+                if (boxH < 4.0f) return;
+
+                boxW = boxH * 0.55f;
+                boxX = screenHead.x - boxW * 0.5f;
+                boxY = screenHead.y;
+                bHasBox = true;
+            }
 
             // 1. Draw 2D Box
-            if (g_Config.visuals.bBox2D)
+            if (g_Config.visuals.bBox2D && bHasBox)
             {
                 DrawBox2D(boxX, boxY, boxW, boxH, boxColor, g_Config.visuals.iBoxType == 0);
             }
 
             // 2. Draw Health Bar
-            if (g_Config.visuals.bHealthBar && isLiving)
+            if (g_Config.visuals.bHealthBar && isLiving && bHasBox)
             {
                 DrawHealthBar(boxX, boxY, boxH, healthRatio);
             }
@@ -387,7 +658,7 @@ namespace Features
             }
 
             // 4. Draw Name / Tag
-            if (g_Config.visuals.bName)
+            if (g_Config.visuals.bName && bHasBox)
             {
                 char labelBuf[128];
                 if (objName && objName[0] != '\0')
@@ -405,7 +676,7 @@ namespace Features
             }
 
             // 5. Draw Distance
-            if (g_Config.visuals.bDistance)
+            if (g_Config.visuals.bDistance && bHasBox)
             {
                 char distBuf[64];
                 snprintf(distBuf, sizeof(distBuf), "%.0fm", distance);
@@ -444,7 +715,7 @@ namespace Features
         XRay::Fvector localCamPos = XRay::Engine::GetCameraPosition();
         XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
 
-        // 1. First iterate active level objects
+        // 1. Iterate active level objects
         XRay::xr_vector<XRay::CObject*>* pActiveObjs = XRay::Engine::GetActiveObjects();
         if (pActiveObjs)
         {
@@ -468,7 +739,7 @@ namespace Features
             }
         }
 
-        // 2. Also check if total objects can be enumerated via engine iterator if active was empty
+        // 2. Fallback to total objects if active list was empty
         uint32_t totalCount = XRay::Engine::GetTotalObjectCount();
         if ((!pActiveObjs || pActiveObjs->size() == 0) && totalCount > 0 && totalCount < 20000)
         {
