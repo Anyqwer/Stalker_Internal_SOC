@@ -1,32 +1,30 @@
-# Prerequisites
-*.d
+# Build Directories
+build/
+bin/
+out/
+.vs/
+*.user
+*.suo
 
 # Compiled Object files
-*.slo
-*.lo
-*.o
 *.obj
+*.o
 
 # Precompiled Headers
-*.gch
 *.pch
+*.gch
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
+# Compiled Dynamic / Static libraries
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
 *.lib
+*.exp
+*.pdb
+*.ilk
 
 # Executables
 *.exe
-*.out
-*.app
+
+# Logs and temporary files
+*.log
+*.tlog
+*.idb
