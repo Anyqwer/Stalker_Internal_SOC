@@ -11,9 +11,11 @@
 #include "../features/Aimbot.hpp"
 #include "../features/Misc.hpp"
 #include <MinHook.h>
+#include <algorithm>
 #include <imgui.h>
 #include <backends/imgui_impl_dx9.h>
 #include <backends/imgui_impl_win32.h>
+#include "../xray/Offsets.hpp"
 
 namespace Hooks
 {
@@ -128,96 +130,138 @@ namespace Hooks
         if (!pDevice)
             return s_oDrawIndexedPrimitive(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 
-        if (!g_Config.chams.bEnabled)
+        // Crucial stability guard: only run chams inside active gameplay!
+        // Prevents loading screen, level transition, and main menu crashes.
+        if (!g_Config.chams.bEnabled || !XRay::Engine::IsInGame())
             return s_oDrawIndexedPrimitive(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
 
-        // Skeletal models (Stalkers & Mutants) use compressed skinning vertex formats in X-Ray:
-        // Decl 1: SHORT4 (8) + UBYTE4 (4) + UBYTE4 (4) + UBYTE4 (4) + SHORT2 (4) = 24 bytes
-        // Decl 2: SHORT4 (8) + UBYTE4 (4) + UBYTE4 (4) + UBYTE4 (4) + SHORT4 (8) = 28 bytes
-        // In contrast, 2D HUD text and numbers use FVF (XYZRHW / POSITIONT with FLOAT4)
-        UINT stride = 0;
-        IDirect3DVertexBuffer9* pVB = nullptr;
-        UINT vbOffset = 0;
-        if (SUCCEEDED(pDevice->GetStreamSource(0, &pVB, &vbOffset, &stride)) && pVB)
+        __try
         {
-            pVB->Release();
-        }
-
-        bool isCharacter = false;
-        if (stride == 24 || stride == 28)
-        {
-            IDirect3DVertexDeclaration9* pDecl = nullptr;
-            if (SUCCEEDED(pDevice->GetVertexDeclaration(&pDecl)) && pDecl)
+            // Skeletal models (Stalkers & Mutants) use compressed skinning vertex formats in X-Ray:
+            // Decl 1: SHORT4 (8) + UBYTE4 (4) + UBYTE4 (4) + UBYTE4 (4) + SHORT2 (4) = 24 bytes
+            // Decl 2: SHORT4 (8) + UBYTE4 (4) + UBYTE4 (4) + UBYTE4 (4) + SHORT4 (8) = 28 bytes
+            // In contrast, 2D HUD text and numbers use FVF (XYZRHW / POSITIONT with FLOAT4)
+            UINT stride = 0;
+            IDirect3DVertexBuffer9* pVB = nullptr;
+            UINT vbOffset = 0;
+            if (SUCCEEDED(pDevice->GetStreamSource(0, &pVB, &vbOffset, &stride)) && pVB)
             {
-                D3DVERTEXELEMENT9 elems[64];
-                UINT numElements = 0;
-                if (SUCCEEDED(pDecl->GetDeclaration(elems, &numElements)) && numElements >= 4)
+                pVB->Release();
+            }
+
+            bool isCharacter = false;
+            if (stride == 24 || stride == 28)
+            {
+                IDirect3DVertexDeclaration9* pDecl = nullptr;
+                if (SUCCEEDED(pDevice->GetVertexDeclaration(&pDecl)) && pDecl)
                 {
-                    // Compressed skinning in X-Ray: element 0 has SHORT4 position.
-                    // 2D font glyphs and HUD numbers use FLOAT4 / XYZRHW with POSITIONT.
-                    if (elems[0].Type == D3DDECLTYPE_SHORT4 && elems[0].Usage == D3DDECLUSAGE_POSITION)
+                    D3DVERTEXELEMENT9 elems[64];
+                    UINT numElements = 0;
+                    if (SUCCEEDED(pDecl->GetDeclaration(elems, &numElements)) && numElements >= 4)
                     {
-                        isCharacter = true;
+                        // Compressed skinning in X-Ray: element 0 has SHORT4 position.
+                        if (elems[0].Type == D3DDECLTYPE_SHORT4 && elems[0].Usage == D3DDECLUSAGE_POSITION)
+                        {
+                            isCharacter = true;
+                        }
                     }
+                    pDecl->Release();
                 }
-                pDecl->Release();
+            }
+
+            if (isCharacter)
+            {
+                ImVec4 cv = g_Config.chams.colVisible;
+                ImVec4 ch = g_Config.chams.colHidden;
+
+                // Style 3: Pulsating Glow
+                if (g_Config.chams.iChamsType == 3)
+                {
+                    float pulse = 0.55f + 0.45f * sinf(static_cast<float>(ImGui::GetTime()) * g_Config.chams.fGlowSpeed);
+                    cv.x = std::clamp(cv.x * pulse, 0.0f, 1.0f);
+                    cv.y = std::clamp(cv.y * pulse, 0.0f, 1.0f);
+                    cv.z = std::clamp(cv.z * pulse, 0.0f, 1.0f);
+                    ch.x = std::clamp(ch.x * pulse, 0.0f, 1.0f);
+                    ch.y = std::clamp(ch.y * pulse, 0.0f, 1.0f);
+                    ch.z = std::clamp(ch.z * pulse, 0.0f, 1.0f);
+                }
+                // Style 5: Rainbow / Chromatic
+                else if (g_Config.chams.iChamsType == 5)
+                {
+                    float hue = fmodf(static_cast<float>(ImGui::GetTime()) * 0.25f, 1.0f);
+                    float r, g, b;
+                    ImGui::ColorConvertHSVtoRGB(hue, 0.9f, 1.0f, r, g, b);
+                    cv = ImVec4(r, g, b, 1.0f);
+                    float hue2 = fmodf(hue + 0.5f, 1.0f);
+                    ImGui::ColorConvertHSVtoRGB(hue2, 0.9f, 1.0f, r, g, b);
+                    ch = ImVec4(r, g, b, 1.0f);
+                }
+
+                uint32_t colVis = D3DCOLOR_COLORVALUE(cv.x, cv.y, cv.z, cv.w);
+                uint32_t colHid = D3DCOLOR_COLORVALUE(ch.x, ch.y, ch.z, ch.w);
+
+                UpdateChamsTexture(pDevice, &s_pTexVisible, colVis, s_lastColVis);
+                UpdateChamsTexture(pDevice, &s_pTexHidden, colHid, s_lastColHid);
+
+                DWORD dwZEnable = D3DZB_TRUE, dwZFunc = D3DCMP_LESSEQUAL, dwZWrite = TRUE, dwFillMode = D3DFILL_SOLID;
+                DWORD dwAlphaBlend = FALSE, dwSrcBlend = D3DBLEND_ONE, dwDestBlend = D3DBLEND_ZERO;
+                pDevice->GetRenderState(D3DRS_ZENABLE, &dwZEnable);
+                pDevice->GetRenderState(D3DRS_ZFUNC, &dwZFunc);
+                pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
+                pDevice->GetRenderState(D3DRS_FILLMODE, &dwFillMode);
+                pDevice->GetRenderState(D3DRS_ALPHABLENDENABLE, &dwAlphaBlend);
+                pDevice->GetRenderState(D3DRS_SRCBLEND, &dwSrcBlend);
+                pDevice->GetRenderState(D3DRS_DESTBLEND, &dwDestBlend);
+
+                IDirect3DBaseTexture9* pOldTex = nullptr;
+                pDevice->GetTexture(0, &pOldTex);
+
+                DWORD fillMode = (g_Config.chams.iChamsType == 1) ? D3DFILL_WIREFRAME : D3DFILL_SOLID;
+                pDevice->SetRenderState(D3DRS_FILLMODE, fillMode);
+
+                // Style 4: Glass Hologram (Additive blend)
+                if (g_Config.chams.iChamsType == 4)
+                {
+                    pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+                    pDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+                    pDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+                }
+
+                // PASS 1: Occluded / Behind Walls (X-Ray through-walls pass)
+                if (g_Config.chams.bThroughWalls)
+                {
+                    pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+                    pDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+                    pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+                    if (s_pTexHidden) pDevice->SetTexture(0, s_pTexHidden);
+
+                    s_oDrawIndexedPrimitive(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+                }
+
+                // PASS 2: Visible / Front of Walls
+                pDevice->SetRenderState(D3DRS_ZENABLE, dwZEnable);
+                pDevice->SetRenderState(D3DRS_ZFUNC, dwZFunc);
+                pDevice->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
+                if (s_pTexVisible) pDevice->SetTexture(0, s_pTexVisible);
+
+                HRESULT hr = s_oDrawIndexedPrimitive(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+
+                // Restore original Direct3D 9 pipeline states
+                pDevice->SetRenderState(D3DRS_ZENABLE, dwZEnable);
+                pDevice->SetRenderState(D3DRS_ZFUNC, dwZFunc);
+                pDevice->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
+                pDevice->SetRenderState(D3DRS_FILLMODE, dwFillMode);
+                pDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, dwAlphaBlend);
+                pDevice->SetRenderState(D3DRS_SRCBLEND, dwSrcBlend);
+                pDevice->SetRenderState(D3DRS_DESTBLEND, dwDestBlend);
+                pDevice->SetTexture(0, pOldTex);
+                if (pOldTex) pOldTex->Release();
+
+                return hr;
             }
         }
-
-        if (isCharacter)
+        __except (EXCEPTION_EXECUTE_HANDLER)
         {
-            uint32_t colVis = D3DCOLOR_COLORVALUE(
-                g_Config.chams.colVisible.x, g_Config.chams.colVisible.y,
-                g_Config.chams.colVisible.z, g_Config.chams.colVisible.w
-            );
-            uint32_t colHid = D3DCOLOR_COLORVALUE(
-                g_Config.chams.colHidden.x, g_Config.chams.colHidden.y,
-                g_Config.chams.colHidden.z, g_Config.chams.colHidden.w
-            );
-
-            UpdateChamsTexture(pDevice, &s_pTexVisible, colVis, s_lastColVis);
-            UpdateChamsTexture(pDevice, &s_pTexHidden, colHid, s_lastColHid);
-
-            DWORD dwZEnable = D3DZB_TRUE, dwZFunc = D3DCMP_LESSEQUAL, dwZWrite = TRUE, dwFillMode = D3DFILL_SOLID;
-            pDevice->GetRenderState(D3DRS_ZENABLE, &dwZEnable);
-            pDevice->GetRenderState(D3DRS_ZFUNC, &dwZFunc);
-            pDevice->GetRenderState(D3DRS_ZWRITEENABLE, &dwZWrite);
-            pDevice->GetRenderState(D3DRS_FILLMODE, &dwFillMode);
-
-            IDirect3DBaseTexture9* pOldTex = nullptr;
-            pDevice->GetTexture(0, &pOldTex);
-
-            DWORD fillMode = (g_Config.chams.iChamsType == 1) ? D3DFILL_WIREFRAME : D3DFILL_SOLID;
-            pDevice->SetRenderState(D3DRS_FILLMODE, fillMode);
-
-            // PASS 1: Occluded / Behind Walls (X-Ray through-walls pass)
-            if (g_Config.chams.bThroughWalls)
-            {
-                pDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
-                pDevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
-                pDevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-                if (s_pTexHidden) pDevice->SetTexture(0, s_pTexHidden);
-
-                s_oDrawIndexedPrimitive(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
-            }
-
-            // PASS 2: Visible / Front of Walls
-            pDevice->SetRenderState(D3DRS_ZENABLE, dwZEnable);
-            pDevice->SetRenderState(D3DRS_ZFUNC, dwZFunc);
-            pDevice->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
-            if (s_pTexVisible) pDevice->SetTexture(0, s_pTexVisible);
-
-            HRESULT hr = s_oDrawIndexedPrimitive(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
-
-            // Restore original Direct3D 9 pipeline states
-            pDevice->SetRenderState(D3DRS_ZENABLE, dwZEnable);
-            pDevice->SetRenderState(D3DRS_ZFUNC, dwZFunc);
-            pDevice->SetRenderState(D3DRS_ZWRITEENABLE, dwZWrite);
-            pDevice->SetRenderState(D3DRS_FILLMODE, dwFillMode);
-            pDevice->SetTexture(0, pOldTex);
-            if (pOldTex) pOldTex->Release();
-
-            return hr;
         }
 
         return s_oDrawIndexedPrimitive(pDevice, Type, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
@@ -239,6 +283,18 @@ namespace Hooks
             if (Core::g_hGameWindow)
             {
                 WndProcHook::Initialize(Core::g_hGameWindow);
+
+                // Strip WS_EX_TOPMOST so game window does NOT lock foreground / block Alt-Tab
+                if (g_Config.settings.bPreventTopmost)
+                {
+                    LONG_PTR exStyle = GetWindowLongPtrA(Core::g_hGameWindow, GWL_EXSTYLE);
+                    if (exStyle & WS_EX_TOPMOST)
+                    {
+                        SetWindowLongPtrA(Core::g_hGameWindow, GWL_EXSTYLE, exStyle & ~WS_EX_TOPMOST);
+                        SetWindowPos(Core::g_hGameWindow, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                        Core::Logger::Success("Removed WS_EX_TOPMOST from S.T.A.L.K.E.R. window (Alt-Tab enabled)");
+                    }
+                }
             }
             else
             {
@@ -249,6 +305,30 @@ namespace Hooks
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO();
             io.IniFilename = nullptr; // Don't create external imgui.ini
+
+            // Load Cyrillic font for full Russian language support
+            const ImWchar* glyphRanges = io.Fonts->GetGlyphRangesCyrillic();
+            const char* fontCandidates[] = {
+                "C:\\Windows\\Fonts\\tahoma.ttf",
+                "C:\\Windows\\Fonts\\arial.ttf",
+                "C:\\Windows\\Fonts\\segoeui.ttf"
+            };
+
+            bool fontLoaded = false;
+            for (const char* path : fontCandidates)
+            {
+                if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES)
+                {
+                    io.Fonts->AddFontFromFileTTF(path, 15.0f, nullptr, glyphRanges);
+                    fontLoaded = true;
+                    Core::Logger::Success("Loaded Cyrillic UI font: %s", path);
+                    break;
+                }
+            }
+            if (!fontLoaded)
+            {
+                io.Fonts->AddFontDefault();
+            }
 
             ImGui_ImplWin32_Init(Core::g_hGameWindow);
             ImGui_ImplDX9_Init(pDevice);
@@ -318,11 +398,17 @@ namespace Hooks
 
             ImGui::NewFrame();
 
-            // Run features
-            Features::Aimbot::Update();
-            Features::Misc::Update();
-            Features::Visuals::Render();
-            UI::Menu::Render();
+            // Run features safely guarded against dangling pointers / level switches
+            __try
+            {
+                Features::Aimbot::Update();
+                Features::Misc::Update();
+                Features::Visuals::Render();
+                UI::Menu::Render();
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+            }
 
             ImGui::EndFrame();
             ImGui::Render();

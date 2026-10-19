@@ -11,11 +11,10 @@ namespace Features
         // Update aimbot logic every frame
         static void Update();
 
-    private:
-        // Find best target meeting FOV and priority criteria
-        static XRay::CObject* FindBestTarget(XRay::Fvector2& outTargetScreenPos);
-
         // Calculate pitch and yaw to target in radians/degrees
         static void CalculateAngles(const XRay::Fvector& src, const XRay::Fvector& dst, float& pitch, float& yaw);
+
+        // Find best target meeting FOV and priority criteria
+        static XRay::CObject* FindBestTarget(XRay::Fvector& outTargetWorld, XRay::Fvector2& outTargetScreenPos);
     };
 }

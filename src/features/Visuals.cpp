@@ -109,10 +109,109 @@ namespace Features
         ImGuiIO& io = ImGui::GetIO();
         float cx = io.DisplaySize.x * 0.5f;
         float cy = io.DisplaySize.y * 0.5f;
-        float size = 5.0f;
 
-        pDrawList->AddLine(ImVec2(cx - size, cy), ImVec2(cx + size + 1, cy), color, 1.5f);
-        pDrawList->AddLine(ImVec2(cx, cy - size), ImVec2(cx, cy + size + 1), color, 1.5f);
+        float size = g_Config.visuals.fCrosshairSize;
+        float gap = g_Config.visuals.fCrosshairGap;
+        float thick = g_Config.visuals.fCrosshairThickness;
+        bool bOutline = g_Config.visuals.bCrosshairOutline;
+        ImU32 outlineCol = IM_COL32(0, 0, 0, 220);
+
+        auto DrawLineThick = [&](ImVec2 p1, ImVec2 p2) {
+            if (bOutline) {
+                pDrawList->AddLine(p1, p2, outlineCol, thick + 2.0f);
+            }
+            pDrawList->AddLine(p1, p2, color, thick);
+        };
+
+        // Center Dot
+        if (g_Config.visuals.bCrosshairDot)
+        {
+            if (bOutline) pDrawList->AddCircleFilled(ImVec2(cx, cy), thick * 0.8f + 1.2f, outlineCol);
+            pDrawList->AddCircleFilled(ImVec2(cx, cy), thick * 0.8f, color);
+        }
+
+        switch (g_Config.visuals.iCrosshairStyle)
+        {
+        case 0: // Classic Cross (+)
+            DrawLineThick(ImVec2(cx - gap - size, cy), ImVec2(cx - gap, cy));
+            DrawLineThick(ImVec2(cx + gap, cy), ImVec2(cx + gap + size, cy));
+            DrawLineThick(ImVec2(cx, cy - gap - size), ImVec2(cx, cy - gap));
+            DrawLineThick(ImVec2(cx, cy + gap), ImVec2(cx, cy + gap + size));
+            break;
+
+        case 1: // Dot Only (.)
+            if (!g_Config.visuals.bCrosshairDot)
+            {
+                if (bOutline) pDrawList->AddCircleFilled(ImVec2(cx, cy), size + 1.2f, outlineCol);
+                pDrawList->AddCircleFilled(ImVec2(cx, cy), size, color);
+            }
+            break;
+
+        case 2: // Circle (o)
+            if (bOutline) pDrawList->AddCircle(ImVec2(cx, cy), gap + size, outlineCol, 32, thick + 1.8f);
+            pDrawList->AddCircle(ImVec2(cx, cy), gap + size, color, 32, thick);
+            break;
+
+        case 3: // Target (Circle + Cross)
+            if (bOutline) pDrawList->AddCircle(ImVec2(cx, cy), gap + size, outlineCol, 32, thick + 1.8f);
+            pDrawList->AddCircle(ImVec2(cx, cy), gap + size, color, 32, thick);
+            DrawLineThick(ImVec2(cx - gap - size - 4, cy), ImVec2(cx - gap, cy));
+            DrawLineThick(ImVec2(cx + gap, cy), ImVec2(cx + gap + size + 4, cy));
+            DrawLineThick(ImVec2(cx, cy - gap - size - 4), ImVec2(cx, cy - gap));
+            DrawLineThick(ImVec2(cx, cy + gap), ImVec2(cx, cy + gap + size + 4));
+            break;
+
+        case 4: // T-Shape
+            DrawLineThick(ImVec2(cx - gap - size, cy), ImVec2(cx - gap, cy));
+            DrawLineThick(ImVec2(cx + gap, cy), ImVec2(cx + gap + size, cy));
+            DrawLineThick(ImVec2(cx, cy + gap), ImVec2(cx, cy + gap + size));
+            break;
+
+        case 5: // CS-Style (with gap)
+            DrawLineThick(ImVec2(cx - gap - size, cy), ImVec2(cx - gap, cy));
+            DrawLineThick(ImVec2(cx + gap, cy), ImVec2(cx + gap + size, cy));
+            DrawLineThick(ImVec2(cx, cy - gap - size), ImVec2(cx, cy - gap));
+            DrawLineThick(ImVec2(cx, cy + gap), ImVec2(cx, cy + gap + size));
+            break;
+        }
+    }
+
+    void Visuals::DrawOffscreenArrow(const XRay::Fvector& targetPos, ImU32 color)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        float cx = io.DisplaySize.x * 0.5f;
+        float cy = io.DisplaySize.y * 0.5f;
+
+        XRay::Fvector camPos = XRay::Engine::GetCameraPosition();
+        XRay::Fvector camDir = XRay::Engine::GetCameraDirection();
+        XRay::Fvector camRight = XRay::Engine::GetCameraRight();
+
+        XRay::Fvector diff = targetPos - camPos;
+        float dirX = diff.x * camRight.x + diff.y * camRight.y + diff.z * camRight.z;
+        float dirZ = diff.x * camDir.x + diff.y * camDir.y + diff.z * camDir.z;
+
+        float angle = std::atan2(dirX, dirZ);
+
+        float radius = g_Config.rage.fArrowRadius;
+        float px = cx + radius * std::sin(angle);
+        float py = cy - radius * std::cos(angle);
+
+        // Arrow head pointing outwards
+        float forwardX = std::sin(angle);
+        float forwardY = -std::cos(angle);
+        float sideX = -forwardY;
+        float sideY = forwardX;
+
+        float arrowSize = 13.0f;
+        float arrowWidth = 7.0f;
+
+        ImVec2 pTip(px + forwardX * arrowSize, py + forwardY * arrowSize);
+        ImVec2 pLeft(px - forwardX * (arrowSize * 0.5f) - sideX * arrowWidth, py - forwardY * (arrowSize * 0.5f) - sideY * arrowWidth);
+        ImVec2 pRight(px - forwardX * (arrowSize * 0.5f) + sideX * arrowWidth, py - forwardY * (arrowSize * 0.5f) + sideY * arrowWidth);
+
+        ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
+        pDrawList->AddTriangleFilled(pTip, pLeft, pRight, color);
+        pDrawList->AddTriangle(pTip, pLeft, pRight, IM_COL32(0, 0, 0, 200), 1.5f);
     }
 
     bool Visuals::DrawSkeletonAndGetBounds(XRay::CObject* pObj, ImDrawList* pDrawList, ImU32 color,
@@ -461,7 +560,7 @@ namespace Features
 
     void Visuals::ProcessObject(XRay::CObject* pObj, ImDrawList* pDrawList, const XRay::Fvector& localPos)
     {
-        if (!pObj) return;
+        if (!pObj || IsBadReadPtr(pObj, 0x100)) return;
 
         __try
         {
@@ -609,6 +708,17 @@ namespace Features
             {
                 float minX = 0, minY = 0, maxX = 0, maxY = 0;
                 ImU32 skelColor = ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeleton);
+                if (g_Config.visuals.bSkeletonByRelation)
+                {
+                    if (category == EntityCategory::Stalker)
+                        skelColor = ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeletonFriend);
+                    else if (category == EntityCategory::Freedom || category == EntityCategory::Duty)
+                        skelColor = ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeletonNeutral);
+                    else if (category == EntityCategory::Mutant)
+                        skelColor = ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeletonMutant);
+                    else
+                        skelColor = ImGui::ColorConvertFloat4ToU32(g_Config.visuals.colSkeletonEnemy);
+                }
                 if (DrawSkeletonAndGetBounds(pObj, pDrawList, skelColor, minX, minY, maxX, maxY))
                 {
                     float padX = (maxX - minX) * 0.12f + 4.0f;
@@ -628,7 +738,13 @@ namespace Features
                 XRay::Fvector head = origin + XRay::Fvector(0.0f, entityHeight, 0.0f);
                 XRay::Fvector2 screenHead;
                 if (!XRay::Math::WorldToScreen(origin, screenFeet) || !XRay::Math::WorldToScreen(head, screenHead))
+                {
+                    if (g_Config.rage.bOffscreenArrows && (category == EntityCategory::Bandit || category == EntityCategory::Military || category == EntityCategory::Monolith || category == EntityCategory::Mercenary || category == EntityCategory::Zombie || category == EntityCategory::Mutant))
+                    {
+                        DrawOffscreenArrow(origin, boxColor);
+                    }
                     return;
+                }
 
                 boxH = std::abs(screenFeet.y - screenHead.y);
                 if (boxH < 4.0f) return;
@@ -637,6 +753,13 @@ namespace Features
                 boxX = screenHead.x - boxW * 0.5f;
                 boxY = screenHead.y;
                 bHasBox = true;
+            }
+
+            ImGuiIO& io = ImGui::GetIO();
+            bool isOffscreen = (screenFeet.x < -10.0f || screenFeet.x > io.DisplaySize.x + 10.0f || screenFeet.y < -10.0f || screenFeet.y > io.DisplaySize.y + 10.0f);
+            if (isOffscreen && g_Config.rage.bOffscreenArrows && (category == EntityCategory::Bandit || category == EntityCategory::Military || category == EntityCategory::Monolith || category == EntityCategory::Mercenary || category == EntityCategory::Zombie || category == EntityCategory::Mutant))
+            {
+                DrawOffscreenArrow(origin, boxColor);
             }
 
             // 1. Draw 2D Box
@@ -697,6 +820,7 @@ namespace Features
     void Visuals::Render()
     {
         if (!g_Config.visuals.bEnabled) return;
+        if (!XRay::Engine::IsInGame()) return;
 
         ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
 

@@ -11,10 +11,13 @@ namespace Hooks
     {
         HRESULT hr = s_oGetDeviceState(pDevice, cbData, lpvData);
 
-        if (SUCCEEDED(hr) && g_Config.bShowMenu && lpvData)
+        if (SUCCEEDED(hr) && lpvData)
         {
-            // If cheat menu is open, zero out state for the game so camera does not spin and weapons don't fire
-            memset(lpvData, 0, cbData);
+            if (g_Config.bShowMenu)
+            {
+                // If cheat menu is open, zero out state for the game so camera does not spin and weapons don't fire
+                memset(lpvData, 0, cbData);
+            }
         }
 
         return hr;

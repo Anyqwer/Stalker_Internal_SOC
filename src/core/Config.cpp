@@ -237,17 +237,30 @@ bool CheatConfig::SaveConfig(const char* configName)
 
     file << "\n[Environment]\n";
     file << "Nightmode=" << environment.bNightmode << "\n";
-    file << "CustomSkybox=" << environment.bCustomSkybox << "\n";
-    file << "ColSkyR=" << environment.colSkybox.x << "\n";
-    file << "ColSkyG=" << environment.colSkybox.y << "\n";
-    file << "ColSkyB=" << environment.colSkybox.z << "\n";
-    file << "CustomAmbient=" << environment.bCustomAmbient << "\n";
-    file << "ColAmbR=" << environment.colAmbient.x << "\n";
-    file << "ColAmbG=" << environment.colAmbient.y << "\n";
-    file << "ColAmbB=" << environment.colAmbient.z << "\n";
     file << "TimeOverride=" << environment.bTimeOverride << "\n";
     file << "TimeOfDay=" << environment.fTimeOfDay << "\n";
     file << "SelectedWeather=" << environment.iSelectedWeather << "\n";
+
+    file << "\n[FOV]\n";
+    file << "Enabled=" << fov.bEnabled << "\n";
+    file << "FOV=" << fov.fFov << "\n";
+
+    file << "\n[Rage]\n";
+    file << "RageAimbot=" << rage.bRageAimbot << "\n";
+    file << "AutoShoot=" << rage.bAutoShoot << "\n";
+    file << "RapidFire=" << rage.bRapidFire << "\n";
+    file << "RapidFireDelay=" << rage.fRapidFireDelay << "\n";
+    file << "360Fov=" << rage.b360Fov << "\n";
+    file << "TargetMutants=" << rage.bTargetMutants << "\n";
+    file << "TargetEnemies=" << rage.bTargetEnemies << "\n";
+    file << "RageBone=" << rage.iRageBone << "\n";
+    file << "Blink=" << rage.bBlink << "\n";
+    file << "BlinkKey=" << rage.keyBlink.vk_code << "\n";
+    file << "BlinkDist=" << rage.fBlinkDist << "\n";
+    file << "Backstab=" << rage.bBackstab << "\n";
+    file << "BackstabKey=" << rage.keyBackstab.vk_code << "\n";
+    file << "OffscreenArrows=" << rage.bOffscreenArrows << "\n";
+    file << "ArrowRadius=" << rage.fArrowRadius << "\n";
 
     file << "\n[Trainers]\n";
     file << "Godmode=" << misc.bGodmode << "\n";
@@ -259,7 +272,9 @@ bool CheatConfig::SaveConfig(const char* configName)
     file << "SpeedMultiplier=" << misc.fSpeedMultiplier << "\n";
     file << "SuperJump=" << misc.bSuperJump << "\n";
     file << "JumpSpeed=" << misc.fJumpSpeed << "\n";
-    file << "Bunnyhop=" << misc.bBunnyhop << "\n";
+    file << "ThirdPerson=" << misc.bThirdPerson << "\n";
+    file << "ThirdPersonMode=" << misc.iThirdPersonMode << "\n";
+    file << "ThirdPersonKey=" << misc.keyThirdPerson.vk_code << "\n";
 
     file << "\n[Settings]\n";
     file << "MenuKey=" << settings.keyMenu.vk_code << "\n";
@@ -375,17 +390,32 @@ bool CheatConfig::LoadConfig(const char* configName)
             else if (section == "Environment")
             {
                 if (key == "Nightmode") environment.bNightmode = toBool(val);
-                else if (key == "CustomSkybox") environment.bCustomSkybox = toBool(val);
-                else if (key == "ColSkyR") environment.colSkybox.x = toFloat(val);
-                else if (key == "ColSkyG") environment.colSkybox.y = toFloat(val);
-                else if (key == "ColSkyB") environment.colSkybox.z = toFloat(val);
-                else if (key == "CustomAmbient") environment.bCustomAmbient = toBool(val);
-                else if (key == "ColAmbR") environment.colAmbient.x = toFloat(val);
-                else if (key == "ColAmbG") environment.colAmbient.y = toFloat(val);
-                else if (key == "ColAmbB") environment.colAmbient.z = toFloat(val);
                 else if (key == "TimeOverride") environment.bTimeOverride = toBool(val);
                 else if (key == "TimeOfDay") environment.fTimeOfDay = toFloat(val);
                 else if (key == "SelectedWeather") environment.iSelectedWeather = toInt(val);
+            }
+            else if (section == "FOV")
+            {
+                if (key == "Enabled") fov.bEnabled = toBool(val);
+                else if (key == "FOV") fov.fFov = toFloat(val);
+            }
+            else if (section == "Rage")
+            {
+                if (key == "RageAimbot") rage.bRageAimbot = toBool(val);
+                else if (key == "AutoShoot") rage.bAutoShoot = toBool(val);
+                else if (key == "RapidFire") rage.bRapidFire = toBool(val);
+                else if (key == "RapidFireDelay") rage.fRapidFireDelay = toFloat(val);
+                else if (key == "360Fov") rage.b360Fov = toBool(val);
+                else if (key == "TargetMutants") rage.bTargetMutants = toBool(val);
+                else if (key == "TargetEnemies") rage.bTargetEnemies = toBool(val);
+                else if (key == "RageBone") rage.iRageBone = toInt(val);
+                else if (key == "Blink") rage.bBlink = toBool(val);
+                else if (key == "BlinkKey") rage.keyBlink.vk_code = toInt(val);
+                else if (key == "BlinkDist") rage.fBlinkDist = toFloat(val);
+                else if (key == "Backstab") rage.bBackstab = toBool(val);
+                else if (key == "BackstabKey") rage.keyBackstab.vk_code = toInt(val);
+                else if (key == "OffscreenArrows") rage.bOffscreenArrows = toBool(val);
+                else if (key == "ArrowRadius") rage.fArrowRadius = toFloat(val);
             }
             else if (section == "Trainers")
             {
@@ -398,7 +428,9 @@ bool CheatConfig::LoadConfig(const char* configName)
                 else if (key == "SpeedMultiplier") misc.fSpeedMultiplier = toFloat(val);
                 else if (key == "SuperJump") misc.bSuperJump = toBool(val);
                 else if (key == "JumpSpeed") misc.fJumpSpeed = toFloat(val);
-                else if (key == "Bunnyhop") misc.bBunnyhop = toBool(val);
+                else if (key == "ThirdPerson") misc.bThirdPerson = toBool(val);
+                else if (key == "ThirdPersonMode") misc.iThirdPersonMode = toInt(val);
+                else if (key == "ThirdPersonKey") misc.keyThirdPerson.vk_code = toInt(val);
             }
             else if (section == "Settings")
             {

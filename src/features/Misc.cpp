@@ -8,6 +8,122 @@
 
 namespace Features
 {
+    void Misc::SetCameraMode(int camIndex)
+    {
+        if (camIndex < 0 || camIndex > 2) return;
+        XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
+        if (!pActor || IsBadReadPtr(pActor, 0x600)) return;
+
+        uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
+        uint32_t curCam = *reinterpret_cast<uint32_t*>(actorAddr + 0x530);
+        if (curCam == static_cast<uint32_t>(camIndex)) return;
+
+        static uintptr_t s_fnCamSet = 0;
+        static bool s_bScanned = false;
+
+        if (!s_bScanned)
+        {
+            s_bScanned = true;
+            HMODULE hXrGame = GetModuleHandleA("xrGame.dll");
+            if (hXrGame)
+            {
+                uint8_t* pBase = reinterpret_cast<uint8_t*>(hXrGame);
+                auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(pBase);
+                if (dos->e_magic == IMAGE_DOS_SIGNATURE)
+                {
+                    auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(pBase + dos->e_lfanew);
+                    size_t imgSize = nt->OptionalHeader.SizeOfImage;
+
+                    const uint8_t pat[] = { 0x8B, 0x86, 0x30, 0x05, 0x00, 0x00, 0x57, 0x8B, 0xBC, 0x86, 0x24, 0x05, 0x00, 0x00 };
+                    for (size_t i = 0; i < imgSize - sizeof(pat); ++i)
+                    {
+                        if (memcmp(pBase + i, pat, sizeof(pat)) == 0)
+                        {
+                            s_fnCamSet = reinterpret_cast<uintptr_t>(pBase + i);
+                            Core::Logger::Success("Located CActor::cam_Set at 0x%p", s_fnCamSet);
+                            break;
+                        }
+                    }
+                }
+
+                if (!s_fnCamSet)
+                {
+                    s_fnCamSet = reinterpret_cast<uintptr_t>(hXrGame) + 0x1DAFB0;
+                }
+            }
+        }
+
+        if (s_fnCamSet)
+        {
+            __try
+            {
+                __asm
+                {
+                    mov esi, actorAddr
+                    mov ecx, camIndex
+                    call s_fnCamSet
+                }
+                Core::Logger::Info("Camera switched to mode %d", camIndex);
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                *reinterpret_cast<uint32_t*>(actorAddr + 0x530) = camIndex;
+            }
+        }
+        else
+        {
+            *reinterpret_cast<uint32_t*>(actorAddr + 0x530) = camIndex;
+        }
+    }
+
+    int Misc::GetCurrentCameraMode()
+    {
+        XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
+        if (!pActor || IsBadReadPtr(pActor, 0x600)) return 0;
+        uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
+        uint32_t cur = *reinterpret_cast<uint32_t*>(actorAddr + 0x530);
+        return (cur <= 2) ? static_cast<int>(cur) : 0;
+    }
+
+    void Misc::HandleThirdPerson()
+    {
+        // Auto-bind console commands once so F1, F2, F3 work out of the box in-game
+        static bool s_bConsoleBound = false;
+        if (!s_bConsoleBound)
+        {
+            s_bConsoleBound = true;
+            auto Exec = [](const char* cmd) {
+                HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
+                if (!h3DA) return;
+                void** ppConsole = reinterpret_cast<void**>(GetProcAddress(h3DA, "?Console@@3PAVCConsole@@A"));
+                if (!ppConsole) ppConsole = reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(h3DA) + 0x10BBBC);
+                typedef void (__thiscall* tExecute)(void* thisPtr, const char* cmd);
+                static tExecute fnExecute = nullptr;
+                if (!fnExecute) {
+                    fnExecute = reinterpret_cast<tExecute>(GetProcAddress(h3DA, "?Execute@CConsole@@QAEXPBD@Z"));
+                    if (!fnExecute) fnExecute = reinterpret_cast<tExecute>(reinterpret_cast<uintptr_t>(h3DA) + 0xBA030);
+                }
+                if (ppConsole && *ppConsole && fnExecute) fnExecute(*ppConsole, cmd);
+            };
+            Exec("bind cam_1 kF1");
+            Exec("bind cam_2 kF2");
+            Exec("bind cam_3 kF3");
+        }
+
+        if (g_Config.bShowMenu) return;
+
+        // Hotkey toggle (e.g. F5)
+        int tpKey = g_Config.misc.keyThirdPerson.vk_code != 0 ? g_Config.misc.keyThirdPerson.vk_code : VK_F5;
+        if (GetAsyncKeyState(tpKey) & 1)
+        {
+            int cur = GetCurrentCameraMode();
+            int next = (cur == 0) ? (g_Config.misc.iThirdPersonMode > 0 ? g_Config.misc.iThirdPersonMode : 1) : 0;
+            SetCameraMode(next);
+            g_Config.misc.bThirdPerson = (next != 0);
+            Core::Logger::Info("Third-Person View hotkey pressed: %s", (next != 0) ? "ON" : "OFF");
+        }
+    }
+
     void Misc::HandleTrainerHotkeys()
     {
         if (g_Config.bShowMenu) return;
@@ -75,64 +191,73 @@ namespace Features
     void Misc::HandleInfiniteAmmo()
     {
         static bool s_bApplied = false;
-        static std::vector<uintptr_t> s_ammoAddresses;
-        static std::vector<std::vector<uint8_t>> s_originalBytes;
-        static bool s_scanned = false;
+        static uintptr_t s_cartridgePopAddr = 0;
+        static uintptr_t s_ammoElapsedAddr = 0;
+        static uint8_t s_origPop[7] = { 0 };
+        static uint8_t s_origElapsed[7] = { 0 };
+        static bool s_init = false;
 
-        if (!s_scanned)
+        if (!s_init)
         {
-            s_scanned = true;
+            s_init = true;
             HMODULE hXrGame = GetModuleHandleA("xrGame.dll");
             if (hXrGame)
             {
-                uint8_t* pBase = reinterpret_cast<uint8_t*>(hXrGame);
-                auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(pBase);
-                if (dos->e_magic == IMAGE_DOS_SIGNATURE)
-                {
-                    auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(pBase + dos->e_lfanew);
-                    size_t imgSize = nt->OptionalHeader.SizeOfImage;
+                uintptr_t base = reinterpret_cast<uintptr_t>(hXrGame);
+                s_cartridgePopAddr = base + 0x21F1CF; // add dword ptr [edi + 0x5C0], -0x38 (pop cartridge)
+                s_ammoElapsedAddr  = base + 0x21F1D6; // add dword ptr [edi + 0x57C], -1     (decrement ammo count)
 
-                    // Search for 8B ?? A8 05 00 00 3B ?? 74 13 83 ?? FF in xrGame.dll
-                    for (size_t i = 0; i < imgSize - 16; ++i)
-                    {
-                        if (pBase[i] == 0x8B && pBase[i+2] == 0xA8 && pBase[i+3] == 0x05 &&
-                            pBase[i+4] == 0x00 && pBase[i+5] == 0x00 && pBase[i+6] == 0x3B &&
-                            pBase[i+8] == 0x74 && pBase[i+9] == 0x13 && pBase[i+10] == 0x83 &&
-                            pBase[i+12] == 0xFF)
-                        {
-                            uintptr_t patchAddr = reinterpret_cast<uintptr_t>(pBase + i + 10);
-                            s_ammoAddresses.push_back(patchAddr);
-
-                            std::vector<uint8_t> orig(pBase + i + 10, pBase + i + 13);
-                            s_originalBytes.push_back(orig);
-
-                            Core::Logger::Success("Found Weapon Ammo decrement at 0x%p (bytes: %02X %02X %02X)",
-                                                  patchAddr, orig[0], orig[1], orig[2]);
-                        }
-                    }
-                }
+                memcpy(s_origPop, reinterpret_cast<void*>(s_cartridgePopAddr), 7);
+                memcpy(s_origElapsed, reinterpret_cast<void*>(s_ammoElapsedAddr), 7);
             }
         }
 
-        if (!s_ammoAddresses.empty())
+        if (s_cartridgePopAddr && s_ammoElapsedAddr)
         {
             if (g_Config.misc.bInfiniteAmmo && !s_bApplied)
             {
-                for (uintptr_t addr : s_ammoAddresses)
-                {
-                    Core::Memory::Nop(addr, 3);
-                }
+                Core::Memory::Nop(s_cartridgePopAddr, 7);
+                Core::Memory::Nop(s_ammoElapsedAddr, 7);
                 s_bApplied = true;
-                Core::Logger::Info("Infinite Ammo: Enabled (%zu NOP patches applied)", s_ammoAddresses.size());
+                Core::Logger::Success("Infinite Ammo: Enabled (NOP applied to xrGame.dll at 0x%p & 0x%p)",
+                                      s_cartridgePopAddr, s_ammoElapsedAddr);
             }
             else if (!g_Config.misc.bInfiniteAmmo && s_bApplied)
             {
-                for (size_t i = 0; i < s_ammoAddresses.size(); ++i)
-                {
-                    Core::Memory::Patch(s_ammoAddresses[i], s_originalBytes[i].data(), 3);
-                }
+                Core::Memory::Patch(s_cartridgePopAddr, s_origPop, 7);
+                Core::Memory::Patch(s_ammoElapsedAddr, s_origElapsed, 7);
                 s_bApplied = false;
-                Core::Logger::Info("Infinite Ammo: Disabled (Original instructions restored)");
+                Core::Logger::Info("Infinite Ammo: Disabled (Restored original bytes)");
+            }
+        }
+
+        // Active weapon refill to maximum magazine capacity each frame
+        if (g_Config.misc.bInfiniteAmmo)
+        {
+            XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
+            if (pActor)
+            {
+                __try
+                {
+                    uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
+                    uintptr_t pInv = *reinterpret_cast<uintptr_t*>(actorAddr + 0x298);
+                    if (pInv && !IsBadReadPtr(reinterpret_cast<void*>(pInv), 0x80))
+                    {
+                        uintptr_t pItem = *reinterpret_cast<uintptr_t*>(pInv + 0x4C); // m_pActiveItem
+                        if (!pItem) pItem = *reinterpret_cast<uintptr_t*>(pInv + 0x48);
+                        if (pItem && !IsBadReadPtr(reinterpret_cast<void*>(pItem), 0x600))
+                        {
+                            int magSize = *reinterpret_cast<int*>(pItem + 0x580);
+                            if (magSize > 0 && magSize < 1000)
+                            {
+                                *reinterpret_cast<int*>(pItem + 0x57C) = magSize;
+                            }
+                        }
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                }
             }
         }
     }
@@ -140,60 +265,96 @@ namespace Features
     void Misc::HandleNoRecoil()
     {
         static bool s_bApplied = false;
-        static uintptr_t s_recoilAddress = 0;
-        static uint8_t s_originalBytes[6] = { 0 };
-        static uint8_t s_patchedBytes[6] = { 0xE9, 0x29, 0x05, 0x00, 0x00, 0x90 }; // jmp +0x529; nop
-        static bool s_scanned = false;
+        static uintptr_t s_recoilAddr1 = 0;
+        static uintptr_t s_recoilAddr2 = 0;
+        static uint8_t s_origBytes1[17] = { 0 };
+        static uint8_t s_origBytes2[17] = { 0 };
+        // Verified stub: mov eax, [esp+4]; xor edx, edx; mov [eax], edx; mov [eax+4], edx; mov [eax+8], edx; ret 4
+        static const uint8_t s_patchBytes[17] = {
+            0x8B, 0x44, 0x24, 0x04,
+            0x31, 0xD2,
+            0x89, 0x10,
+            0x89, 0x50, 0x04,
+            0x89, 0x50, 0x08,
+            0xC2, 0x04, 0x00
+        };
+        static bool s_init = false;
 
-        if (!s_scanned)
+        if (!s_init)
         {
-            s_scanned = true;
+            s_init = true;
             HMODULE hXrGame = GetModuleHandleA("xrGame.dll");
             if (hXrGame)
             {
-                uint8_t* pBase = reinterpret_cast<uint8_t*>(hXrGame);
-                auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(pBase);
-                if (dos->e_magic == IMAGE_DOS_SIGNATURE)
-                {
-                    auto nt = reinterpret_cast<IMAGE_NT_HEADERS*>(pBase + dos->e_lfanew);
-                    size_t imgSize = nt->OptionalHeader.SizeOfImage;
+                uintptr_t base = reinterpret_cast<uintptr_t>(hXrGame);
+                s_recoilAddr1 = base + 0x19F4A0; // CWeaponShotEffector::GetDeltaAngle (shot 1)
+                s_recoilAddr2 = base + 0x19F4D0; // CWeaponShotEffector::GetDeltaAngle (shot 2)
 
-                    // Pattern: 83 BB 9C 02 00 00 00 0F 84
-                    for (size_t i = 0; i < imgSize - 16; ++i)
-                    {
-                        if (pBase[i] == 0x83 && pBase[i+1] == 0xBB && pBase[i+2] == 0x9C &&
-                            pBase[i+3] == 0x02 && pBase[i+4] == 0x00 && pBase[i+5] == 0x00 &&
-                            pBase[i+6] == 0x00 && pBase[i+7] == 0x0F && pBase[i+8] == 0x84)
-                        {
-                            s_recoilAddress = reinterpret_cast<uintptr_t>(pBase + i + 7);
-                            memcpy(s_originalBytes, pBase + i + 7, 6);
-                            Core::Logger::Success("Found Camera Recoil Effector branch at 0x%p", s_recoilAddress);
-                            break;
-                        }
-                    }
-                }
+                memcpy(s_origBytes1, reinterpret_cast<void*>(s_recoilAddr1), 17);
+                memcpy(s_origBytes2, reinterpret_cast<void*>(s_recoilAddr2), 17);
             }
         }
 
-        if (s_recoilAddress)
+        if (s_recoilAddr1 && s_recoilAddr2)
         {
             if (g_Config.misc.bNoRecoil && !s_bApplied)
             {
-                Core::Memory::Patch(s_recoilAddress, s_patchedBytes, 6);
+                Core::Memory::Patch(s_recoilAddr1, s_patchBytes, 17);
+                Core::Memory::Patch(s_recoilAddr2, s_patchBytes, 17);
                 s_bApplied = true;
-                Core::Logger::Info("No Recoil: Enabled (Camera kick bypassed)");
+                Core::Logger::Success("No Recoil: Enabled (Zero delta angle patch applied at 0x%p)", s_recoilAddr1);
             }
             else if (!g_Config.misc.bNoRecoil && s_bApplied)
             {
-                Core::Memory::Patch(s_recoilAddress, s_originalBytes, 6);
+                Core::Memory::Patch(s_recoilAddr1, s_origBytes1, 17);
+                Core::Memory::Patch(s_recoilAddr2, s_origBytes2, 17);
                 s_bApplied = false;
-                Core::Logger::Info("No Recoil: Disabled (Original restored)");
+                Core::Logger::Info("No Recoil: Disabled (Restored original bytes)");
             }
         }
     }
 
     void Misc::HandleWeightLimit()
     {
+        static bool s_bApplied = false;
+        static uintptr_t s_weightFnAddr = 0;
+        static uint8_t s_origBytes[12] = { 0 };
+        // Clean function entry bypass: and word ptr [ecx + 0xf0], 0xff7f; xor al, al; ret
+        static const uint8_t s_patchBytes[12] = {
+            0x66, 0x81, 0xA1, 0xF0, 0x00, 0x00, 0x00, 0x7F, 0xFF,
+            0x30, 0xC0,
+            0xC3
+        };
+        static bool s_init = false;
+
+        if (!s_init)
+        {
+            s_init = true;
+            HMODULE hXrGame = GetModuleHandleA("xrGame.dll");
+            if (hXrGame)
+            {
+                // CActorCondition::IsCantWalkWeight function entry
+                s_weightFnAddr = reinterpret_cast<uintptr_t>(hXrGame) + 0x1DD740;
+                memcpy(s_origBytes, reinterpret_cast<void*>(s_weightFnAddr), 12);
+            }
+        }
+
+        if (s_weightFnAddr)
+        {
+            if (g_Config.misc.bInfiniteWeight && !s_bApplied)
+            {
+                Core::Memory::Patch(s_weightFnAddr, s_patchBytes, 12);
+                s_bApplied = true;
+                Core::Logger::Success("Weight Limit: Bypassed IsCantWalkWeight at 0x%p", s_weightFnAddr);
+            }
+            else if (!g_Config.misc.bInfiniteWeight && s_bApplied)
+            {
+                Core::Memory::Patch(s_weightFnAddr, s_origBytes, 12);
+                s_bApplied = false;
+                Core::Logger::Info("Weight Limit: Restored IsCantWalkWeight");
+            }
+        }
+
         XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
         if (!pActor) return;
 
@@ -208,11 +369,8 @@ namespace Features
 
                 if (g_Config.misc.bInfiniteWeight)
                 {
-                    if (*pMaxWalk != g_Config.misc.fWeightLimit)
-                    {
-                        *pMaxWalk = g_Config.misc.fWeightLimit;
-                        *pMaxWeight = g_Config.misc.fWeightLimit;
-                    }
+                    *pMaxWalk = g_Config.misc.fWeightLimit;
+                    *pMaxWeight = g_Config.misc.fWeightLimit;
                 }
                 else
                 {
@@ -258,48 +416,22 @@ namespace Features
         __try
         {
             uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
-            float targetRun = g_Config.misc.bSpeedhack ? (1.5f * g_Config.misc.fSpeedMultiplier) : 1.5f;
-            float targetSprint = g_Config.misc.bSpeedhack ? (2.0f * g_Config.misc.fSpeedMultiplier) : 2.0f;
+            float mult = g_Config.misc.bSpeedhack ? g_Config.misc.fSpeedMultiplier : 1.0f;
 
+            float targetWalkAccel = 12.0f * mult;
+            float targetRun = 2.0f * mult;
+            float targetSprint = 2.6f * mult;
+
+            float* pWalkAccel = reinterpret_cast<float*>(actorAddr + 0x5a0);
             float* pRunFactor = reinterpret_cast<float*>(actorAddr + 0x5a8);
-            float* pSprintFactor = reinterpret_cast<float*>(actorAddr + 0x5c0);
+            float* pSprintFactor = reinterpret_cast<float*>(actorAddr + 0x5bc);
 
-            if (*pRunFactor != targetRun)
-            {
-                *pRunFactor = targetRun;
-                *pSprintFactor = targetSprint;
-            }
+            if (*pWalkAccel != targetWalkAccel) *pWalkAccel = targetWalkAccel;
+            if (*pRunFactor != targetRun) *pRunFactor = targetRun;
+            if (*pSprintFactor != targetSprint) *pSprintFactor = targetSprint;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
-        }
-    }
-
-    void Misc::HandleBunnyhop()
-    {
-        if (!g_Config.misc.bBunnyhop || g_Config.bShowMenu) return;
-
-        static bool s_bJumping = false;
-        if (GetAsyncKeyState(VK_SPACE) & 0x8000)
-        {
-            if (s_bJumping)
-            {
-                keybd_event(VK_SPACE, 0, KEYEVENTF_KEYUP, 0);
-                s_bJumping = false;
-            }
-            else
-            {
-                keybd_event(VK_SPACE, 0, 0, 0);
-                s_bJumping = true;
-            }
-        }
-        else
-        {
-            if (s_bJumping)
-            {
-                keybd_event(VK_SPACE, 0, KEYEVENTF_KEYUP, 0);
-                s_bJumping = false;
-            }
         }
     }
 
@@ -363,98 +495,49 @@ namespace Features
                 s_lastNightmode = g_Config.environment.bNightmode;
                 if (s_lastNightmode)
                 {
-                    // Darken the sun lumscale and ambient in R2 deferred lighting
                     ExecuteConsoleCmd("r2_sun_lumscale 0.05");
                     ExecuteConsoleCmd("r2_sun_lumscale_amb 0.25");
                     ExecuteConsoleCmd("r2_sun_lumscale_hemi 0.35");
                 }
                 else
                 {
-                    // Restore standard lighting lumscales
                     ExecuteConsoleCmd("r2_sun_lumscale 1.0");
                     ExecuteConsoleCmd("r2_sun_lumscale_amb 1.0");
                     ExecuteConsoleCmd("r2_sun_lumscale_hemi 1.0");
                 }
             }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+    }
 
-            // 4. Skybox & Ambient memory overrides
-            uintptr_t env0 = *reinterpret_cast<uintptr_t*>(pEnv + 0x28C);
-            uintptr_t env1 = *reinterpret_cast<uintptr_t*>(pEnv + 0x290);
+    void Misc::HandleFovChanger()
+    {
+        if (!XRay::Engine::IsInGame()) return;
 
-            if (g_Config.environment.bNightmode)
+        __try
+        {
+            XRay::CRenderDevice* pDev = XRay::Engine::GetDevice();
+            if (pDev && !IsBadReadPtr(pDev, 0x120))
             {
-                float nightSky[3] = {
-                    g_Config.environment.colNightmode.x * 0.12f,
-                    g_Config.environment.colNightmode.y * 0.16f,
-                    g_Config.environment.colNightmode.z * 0.28f
-                };
-                float nightAmb[3] = {
-                    g_Config.environment.colNightmode.x * 0.15f,
-                    g_Config.environment.colNightmode.y * 0.18f,
-                    g_Config.environment.colNightmode.z * 0.28f
-                };
-                float nightSun[3] = { 0.04f, 0.05f, 0.08f };
-
-                // In CEnvironment: RenderSky directly reads 0x1A4!
-                memcpy(reinterpret_cast<void*>(pEnv + 0x1A4), nightSky, sizeof(nightSky));
-                memcpy(reinterpret_cast<void*>(pEnv + 0x194), nightSky, sizeof(nightSky));
-                memcpy(reinterpret_cast<void*>(pEnv + 0x1F0), nightAmb, sizeof(nightAmb));
-                memcpy(reinterpret_cast<void*>(pEnv + 0x1B4), nightSun, sizeof(nightSun));
-
-                // Also override Current[0] and Current[1] so lerp in OnFrame() maintains night values
-                if (env0 && !IsBadReadPtr(reinterpret_cast<void*>(env0), 0x100))
-                {
-                    memcpy(reinterpret_cast<void*>(env0 + 0x30), nightSky, sizeof(nightSky));
-                    memcpy(reinterpret_cast<void*>(env0 + 0x20), nightSky, sizeof(nightSky));
-                    memcpy(reinterpret_cast<void*>(env0 + 0x7C), nightAmb, sizeof(nightAmb));
-                    memcpy(reinterpret_cast<void*>(env0 + 0x40), nightSun, sizeof(nightSun));
-                }
-                if (env1 && !IsBadReadPtr(reinterpret_cast<void*>(env1), 0x100))
-                {
-                    memcpy(reinterpret_cast<void*>(env1 + 0x30), nightSky, sizeof(nightSky));
-                    memcpy(reinterpret_cast<void*>(env1 + 0x20), nightSky, sizeof(nightSky));
-                    memcpy(reinterpret_cast<void*>(env1 + 0x7C), nightAmb, sizeof(nightAmb));
-                    memcpy(reinterpret_cast<void*>(env1 + 0x40), nightSun, sizeof(nightSun));
-                }
+                uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
+                float targetFov = g_Config.fov.bEnabled ? g_Config.fov.fFov : 67.5f;
+                *reinterpret_cast<float*>(devAddr + 0x110) = targetFov;
             }
-            else
-            {
-                if (g_Config.environment.bCustomSkybox)
-                {
-                    float sky[3] = {
-                        g_Config.environment.colSkybox.x,
-                        g_Config.environment.colSkybox.y,
-                        g_Config.environment.colSkybox.z
-                    };
-                    memcpy(reinterpret_cast<void*>(pEnv + 0x1A4), sky, sizeof(sky));
-                    memcpy(reinterpret_cast<void*>(pEnv + 0x194), sky, sizeof(sky));
-                    if (env0 && !IsBadReadPtr(reinterpret_cast<void*>(env0), 0x100))
-                    {
-                        memcpy(reinterpret_cast<void*>(env0 + 0x30), sky, sizeof(sky));
-                        memcpy(reinterpret_cast<void*>(env0 + 0x20), sky, sizeof(sky));
-                    }
-                    if (env1 && !IsBadReadPtr(reinterpret_cast<void*>(env1), 0x100))
-                    {
-                        memcpy(reinterpret_cast<void*>(env1 + 0x30), sky, sizeof(sky));
-                        memcpy(reinterpret_cast<void*>(env1 + 0x20), sky, sizeof(sky));
-                    }
-                }
 
-                if (g_Config.environment.bCustomAmbient)
+            XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
+            if (pActor && !IsBadReadPtr(pActor, 0x540))
+            {
+                uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
+                float targetRad = (g_Config.fov.bEnabled ? g_Config.fov.fFov : 67.5f) * (3.14159265f / 180.0f);
+
+                for (int i = 0; i < 3; ++i)
                 {
-                    float amb[3] = {
-                        g_Config.environment.colAmbient.x,
-                        g_Config.environment.colAmbient.y,
-                        g_Config.environment.colAmbient.z
-                    };
-                    memcpy(reinterpret_cast<void*>(pEnv + 0x1F0), amb, sizeof(amb));
-                    if (env0 && !IsBadReadPtr(reinterpret_cast<void*>(env0), 0x100))
+                    uintptr_t pCam = *reinterpret_cast<uintptr_t*>(actorAddr + 0x524 + i * 4);
+                    if (pCam && !IsBadReadPtr(reinterpret_cast<void*>(pCam), 0x30))
                     {
-                        memcpy(reinterpret_cast<void*>(env0 + 0x7C), amb, sizeof(amb));
-                    }
-                    if (env1 && !IsBadReadPtr(reinterpret_cast<void*>(env1), 0x100))
-                    {
-                        memcpy(reinterpret_cast<void*>(env1 + 0x7C), amb, sizeof(amb));
+                        *reinterpret_cast<float*>(pCam + 0x20) = targetRad;
                     }
                 }
             }
@@ -467,13 +550,17 @@ namespace Features
     void Misc::Update()
     {
         HandleTrainerHotkeys();
+
+        if (!XRay::Engine::IsInGame()) return;
+
+        HandleThirdPerson();
         HandleGodmode();
         HandleInfiniteAmmo();
         HandleNoRecoil();
         HandleWeightLimit();
         HandleSuperJump();
         HandleSpeedhack();
-        HandleBunnyhop();
         HandleEnvironment();
+        HandleFovChanger();
     }
 }

@@ -74,38 +74,171 @@ namespace XRay
             return nullptr;
         }
 
+        static bool IsInGame()
+        {
+            __try
+            {
+                CRenderDevice* pDev = GetDevice();
+                if (!pDev || IsBadReadPtr(pDev, sizeof(void*))) return false;
+
+                CLevel* pLevel = GetLevel();
+                if (!pLevel || IsBadReadPtr(pLevel, sizeof(void*))) return false;
+
+                uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
+                if (IsBadReadPtr(reinterpret_cast<void*>(lvlAddr + 0x54), 0x40)) return false;
+
+                CObject* pActor = nullptr;
+                if (!Core::Memory::SafeRead(lvlAddr + 0x20, pActor)) return false;
+                if (!pActor || IsBadReadPtr(pActor, 0x600)) return false;
+
+                uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
+                float posX = 0.0f, posY = 0.0f, posZ = 0.0f;
+                if (!Core::Memory::SafeRead(actorAddr + 0x80, posX) ||
+                    !Core::Memory::SafeRead(actorAddr + 0x84, posY) ||
+                    !Core::Memory::SafeRead(actorAddr + 0x88, posZ))
+                    return false;
+
+                if (posX == 0.0f && posY == 0.0f && posZ == 0.0f)
+                    return false;
+
+                uintptr_t pConditions = 0;
+                if (!Core::Memory::SafeRead(actorAddr + 0x220, pConditions)) return false;
+                if (!pConditions || IsBadReadPtr(reinterpret_cast<void*>(pConditions), 0x150)) return false;
+
+                float hp = 0.0f;
+                if (!Core::Memory::SafeRead(pConditions + 0x04, hp)) return false;
+                if (hp <= 0.0f || hp > 1000.0f || std::isnan(hp)) return false;
+
+                return true;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return false;
+            }
+        }
+
+        static EntityRelation ClassifyRelation(uintptr_t objAddr, CObject* pObj, CObject* pActor)
+        {
+            if (!pObj || pObj == pActor) return EntityRelation::Unknown;
+
+            __try
+            {
+                const char* sect = SafeReadSharedStr(objAddr + 0xAC);
+                const char* name = SafeReadSharedStr(objAddr + 0xA8);
+                const char* visual = SafeReadSharedStr(objAddr + 0xB0);
+
+                char sectLower[128] = { 0 };
+                char visualLower[128] = { 0 };
+                char nameLower[128] = { 0 };
+
+                for (size_t i = 0; i < sizeof(sectLower) - 1 && sect[i]; ++i)
+                    sectLower[i] = static_cast<char>(tolower(static_cast<unsigned char>(sect[i])));
+                for (size_t i = 0; i < sizeof(visualLower) - 1 && visual[i]; ++i)
+                    visualLower[i] = static_cast<char>(tolower(static_cast<unsigned char>(visual[i])));
+                for (size_t i = 0; i < sizeof(nameLower) - 1 && name[i]; ++i)
+                    nameLower[i] = static_cast<char>(tolower(static_cast<unsigned char>(name[i])));
+
+                // Skip player
+                if (strstr(sectLower, "actor") || strstr(nameLower, "single_player"))
+                    return EntityRelation::Unknown;
+
+                // Mutants
+                if (strstr(visualLower, "monster") || strstr(visualLower, "mutant") ||
+                    strncmp(sectLower, "m_", 2) == 0 ||
+                    strstr(sectLower, "boar") || strstr(sectLower, "flesh") || strstr(sectLower, "dog") ||
+                    strstr(sectLower, "bloodsucker") || strstr(sectLower, "snork") ||
+                    strstr(sectLower, "controller") || strstr(sectLower, "gigant") ||
+                    strstr(sectLower, "tushkano") || strstr(sectLower, "burer") ||
+                    strstr(sectLower, "chimera") || strstr(sectLower, "poltergeist"))
+                {
+                    return EntityRelation::Mutant;
+                }
+
+                // Check human characters
+                bool isHuman = (strstr(visualLower, "actor") || strstr(visualLower, "stalker") || strstr(visualLower, "hero") ||
+                                strstr(sectLower, "stalker") || strstr(sectLower, "bandit") || strstr(sectLower, "soldier") ||
+                                strstr(sectLower, "military") || strstr(sectLower, "monolith") || strstr(sectLower, "merc") ||
+                                strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(sectLower, "freedom") ||
+                                strstr(sectLower, "zombied") || strstr(sectLower, "novice") || strstr(sectLower, "veteran") ||
+                                strncmp(sectLower, "esc_", 4) == 0 || strncmp(sectLower, "gar_", 4) == 0 ||
+                                strncmp(sectLower, "agr_", 4) == 0 || strncmp(sectLower, "val_", 4) == 0 ||
+                                strncmp(sectLower, "bar_", 4) == 0 || strncmp(sectLower, "mil_", 4) == 0);
+
+                if (isHuman)
+                {
+                    // Enemies (Hostile by default in SoC)
+                    if (strstr(sectLower, "bandit") || strstr(visualLower, "bandit") || strstr(nameLower, "bandit") ||
+                        strstr(sectLower, "monolith") || strstr(visualLower, "monolith") || strstr(nameLower, "monolith") ||
+                        strstr(sectLower, "merc") || strstr(sectLower, "killer") || strstr(visualLower, "merc") ||
+                        strstr(sectLower, "military") || strstr(sectLower, "soldier") || strstr(visualLower, "soldier") || strstr(sectLower, "voen") ||
+                        strstr(sectLower, "zombied") || strstr(visualLower, "zombied"))
+                    {
+                        return EntityRelation::Enemy;
+                    }
+
+                    // Neutrals (Duty & Freedom, Ecologists)
+                    if (strstr(sectLower, "freedom") || strstr(sectLower, "svoboda") || strstr(visualLower, "freedom") ||
+                        strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(visualLower, "dolg") ||
+                        strstr(sectLower, "ecolog") || strstr(visualLower, "ecolog"))
+                    {
+                        return EntityRelation::Neutral;
+                    }
+
+                    // Friends / Allies (Loners, neutral stalkers, traders, bar regulars)
+                    return EntityRelation::Friend;
+                }
+
+                return EntityRelation::Unknown;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return EntityRelation::Unknown;
+            }
+        }
+
         static CObject* GetCurrentEntity()
         {
             CLevel* pLevel = GetLevel();
-            if (!pLevel) return nullptr;
+            if (!pLevel || IsBadReadPtr(pLevel, sizeof(void*))) return nullptr;
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
             CObject* pActor = nullptr;
-            Core::Memory::SafeRead(lvlAddr + 0x20, pActor);
-            return pActor;
+            if (Core::Memory::SafeRead(lvlAddr + 0x20, pActor))
+            {
+                if (pActor && !IsBadReadPtr(pActor, 0x100))
+                    return pActor;
+            }
+            return nullptr;
         }
 
         static xr_vector<CObject*>* GetActiveObjects()
         {
             CLevel* pLevel = GetLevel();
-            if (!pLevel) return nullptr;
+            if (!pLevel || IsBadReadPtr(pLevel, sizeof(void*))) return nullptr;
 
-            // In S.T.A.L.K.E.R. SoC (1.0006):
-            // CObjectList is at offset 0x54 in g_pGameLevel
-            // Inside CObjectList, objects_active vector is at offset 0x1C
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
             uintptr_t objList = lvlAddr + 0x54;
-            return reinterpret_cast<xr_vector<CObject*>*>(objList + 0x1C);
+            if (IsBadReadPtr(reinterpret_cast<void*>(objList), 0x40)) return nullptr;
+
+            xr_vector<CObject*>* pVec = reinterpret_cast<xr_vector<CObject*>*>(objList + 0x1C);
+            if (IsBadReadPtr(pVec, sizeof(xr_vector<CObject*>))) return nullptr;
+
+            return pVec;
         }
 
         static xr_vector<CObject*>* GetSleepingObjects()
         {
             CLevel* pLevel = GetLevel();
-            if (!pLevel) return nullptr;
+            if (!pLevel || IsBadReadPtr(pLevel, sizeof(void*))) return nullptr;
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
             uintptr_t objList = lvlAddr + 0x54;
-            return reinterpret_cast<xr_vector<CObject*>*>(objList + 0x2C);
+            if (IsBadReadPtr(reinterpret_cast<void*>(objList), 0x40)) return nullptr;
+
+            xr_vector<CObject*>* pVec = reinterpret_cast<xr_vector<CObject*>*>(objList + 0x2C);
+            if (IsBadReadPtr(pVec, sizeof(xr_vector<CObject*>))) return nullptr;
+
+            return pVec;
         }
 
         static uint32_t GetTotalObjectCount()
@@ -225,6 +358,65 @@ namespace XRay
                 return camPos;
 
             return Fvector(0, 0, 0);
+        }
+
+        static Fvector GetCameraDirection()
+        {
+            CRenderDevice* pDev = GetDevice();
+            if (!pDev) return Fvector(0, 0, 1);
+
+            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
+            Fvector camDir;
+            if (Core::Memory::SafeRead(devAddr + 0x218, camDir))
+                return camDir;
+
+            return Fvector(0, 0, 1);
+        }
+
+        static Fvector GetCameraRight()
+        {
+            CRenderDevice* pDev = GetDevice();
+            if (!pDev) return Fvector(1, 0, 0);
+
+            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
+            Fvector camRight;
+            if (Core::Memory::SafeRead(devAddr + 0x230, camRight))
+                return camRight;
+
+            return Fvector(1, 0, 0);
+        }
+
+        static bool TeleportActor(const Fvector& newPos)
+        {
+            CObject* pActor = GetCurrentEntity();
+            if (!pActor) return false;
+
+            __try
+            {
+                uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
+
+                // 1. Set render_transform position matrix (_41, _42, _43)
+                *reinterpret_cast<float*>(actorAddr + 0x80) = newPos.x;
+                *reinterpret_cast<float*>(actorAddr + 0x84) = newPos.y;
+                *reinterpret_cast<float*>(actorAddr + 0x88) = newPos.z;
+
+                // 2. Set physics movement controller position if available
+                uintptr_t physSupport = *reinterpret_cast<uintptr_t*>(actorAddr + 0x24C);
+                if (physSupport && !IsBadReadPtr(reinterpret_cast<void*>(physSupport), 0x20))
+                {
+                    uintptr_t mov = *reinterpret_cast<uintptr_t*>(physSupport + 0x08);
+                    if (mov && !IsBadReadPtr(reinterpret_cast<void*>(mov), 0x30))
+                    {
+                        *reinterpret_cast<Fvector*>(mov + 0x10) = newPos;
+                        *reinterpret_cast<Fvector*>(mov + 0x1C) = Fvector(0, 0, 0); // clear velocity
+                    }
+                }
+                return true;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return false;
+            }
         }
 
         // Raycast Visibility Check using native X-Ray CObjectSpace::RayTest
@@ -463,4 +655,144 @@ namespace XRay
         static inline tRayTest s_fnRayTest = nullptr;
         static inline tLL_BoneID s_fnLL_BoneID = nullptr;
     };
+
+    namespace Script
+    {
+        typedef int (*luaL_loadbuffer_t)(void* L, const char* buff, size_t sz, const char* name);
+        typedef int (*lua_pcall_t)(void* L, int nargs, int nresults, int errfunc);
+        typedef const char* (*lua_tolstring_t)(void* L, int idx, size_t* len);
+        typedef void (*lua_settop_t)(void* L, int idx);
+
+        inline bool Execute(const char* luaCode)
+        {
+            if (!luaCode || !*luaCode) return false;
+
+            HMODULE hXrGame = GetModuleHandleA("xrGame.dll");
+            HMODULE hXrLua = GetModuleHandleA("xrLua.dll");
+            if (!hXrGame || !hXrLua) return false;
+
+            __try
+            {
+                uintptr_t baseGame = reinterpret_cast<uintptr_t>(hXrGame);
+                uintptr_t ai_space = *reinterpret_cast<uintptr_t*>(baseGame + 0x5602B0);
+                if (!ai_space || IsBadReadPtr(reinterpret_cast<void*>(ai_space), 0x30)) return false;
+
+                uintptr_t script_engine = *reinterpret_cast<uintptr_t*>(ai_space + 0x20);
+                if (!script_engine || IsBadReadPtr(reinterpret_cast<void*>(script_engine), 0x10)) return false;
+
+                void* L = *reinterpret_cast<void**>(script_engine + 0x04);
+                if (!L) return false;
+
+                static auto fnLoadBuffer = reinterpret_cast<luaL_loadbuffer_t>(GetProcAddress(hXrLua, "luaL_loadbuffer"));
+                static auto fnPCall = reinterpret_cast<lua_pcall_t>(GetProcAddress(hXrLua, "lua_pcall"));
+                static auto fnToString = reinterpret_cast<lua_tolstring_t>(GetProcAddress(hXrLua, "lua_tolstring"));
+                static auto fnSetTop = reinterpret_cast<lua_settop_t>(GetProcAddress(hXrLua, "lua_settop"));
+
+                if (!fnLoadBuffer || !fnPCall) return false;
+
+                int loadRes = fnLoadBuffer(L, luaCode, strlen(luaCode), "@CheatZoneLord");
+                if (loadRes != 0)
+                {
+                    if (fnToString)
+                    {
+                        const char* err = fnToString(L, -1, nullptr);
+                        Core::Logger::Error("ZoneLord Lua Load Error: %s", err ? err : "unknown");
+                    }
+                    if (fnSetTop) fnSetTop(L, -2);
+                    return false;
+                }
+
+                int pcallRes = fnPCall(L, 0, 0, 0);
+                if (pcallRes != 0)
+                {
+                    if (fnToString)
+                    {
+                        const char* err = fnToString(L, -1, nullptr);
+                        Core::Logger::Error("ZoneLord Lua Runtime Error: %s", err ? err : "unknown");
+                    }
+                    if (fnSetTop) fnSetTop(L, -2);
+                    return false;
+                }
+
+                return true;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return false;
+            }
+        }
+
+        inline void SpawnItem(const char* section, int count = 1, bool toInventory = true)
+        {
+            if (!section || !*section) return;
+            if (count < 1) count = 1;
+
+            char script[512];
+            if (toInventory)
+            {
+                snprintf(script, sizeof(script),
+                    "local a=db.actor if a and alife() then for i=1,%d do alife():create(\"%s\",a:position(),a:level_vertex_id(),a:game_vertex_id(),a:id()) end end",
+                    count, section);
+            }
+            else
+            {
+                snprintf(script, sizeof(script),
+                    "local a=db.actor if a and alife() then local d=a:direction() local p=a:position() p.x=p.x+d.x*2.0; p.y=p.y+d.y*2.0+0.3; p.z=p.z+d.z*2.0 for i=1,%d do alife():create(\"%s\",p,a:level_vertex_id(),a:game_vertex_id()) end end",
+                    count, section);
+            }
+            Execute(script);
+            Core::Logger::Success("Spawned %d x [%s] (To inventory: %s)", count, section, toInventory ? "yes" : "no");
+        }
+
+        inline void SpawnEntity(const char* section, int count = 1, float distance = 4.0f)
+        {
+            if (!section || !*section) return;
+            if (count < 1) count = 1;
+            if (distance < 1.0f) distance = 1.0f;
+
+            char script[512];
+            snprintf(script, sizeof(script),
+                "local a=db.actor if a and alife() then local d=a:direction() local p=a:position() p.x=p.x+d.x*%.1f; p.y=p.y+d.y*%.1f+0.4; p.z=p.z+d.z*%.1f for i=1,%d do alife():create(\"%s\",p,a:level_vertex_id(),a:game_vertex_id()) end end",
+                distance, distance, distance, count, section);
+            Execute(script);
+            Core::Logger::Success("Spawned %d x [%s] (Distance: %.1fm)", count, section, distance);
+        }
+
+        inline void GiveMoney(int amount)
+        {
+            char script[256];
+            snprintf(script, sizeof(script),
+                "local a=db.actor if a then a:give_money(%d) end", amount);
+            Execute(script);
+            Core::Logger::Success("Added %d RU to Actor money", amount);
+        }
+
+        inline void Teleport(float x, float y, float z)
+        {
+            char script[256];
+            snprintf(script, sizeof(script),
+                "local a=db.actor if a then a:set_actor_position(vector():set(%.2f,%.2f,%.2f)) end",
+                x, y, z);
+            Execute(script);
+            Core::Logger::Success("Teleported Actor to (%.2f, %.2f, %.2f)", x, y, z);
+        }
+
+        inline void SetWeather(const char* weatherName)
+        {
+            if (!weatherName || !*weatherName) return;
+            char script[256];
+            snprintf(script, sizeof(script), "level.set_weather(\"%s\", true)", weatherName);
+            Execute(script);
+            Core::Logger::Success("Changed Level Weather to [%s]", weatherName);
+        }
+
+        inline void SetTimeFactor(float factor)
+        {
+            if (factor < 0.1f) factor = 0.1f;
+            char script[256];
+            snprintf(script, sizeof(script), "level.set_time_factor(%.1f)", factor);
+            Execute(script);
+            Core::Logger::Success("Changed Time Factor to %.1fx", factor);
+        }
+    }
 }

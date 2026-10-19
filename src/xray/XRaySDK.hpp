@@ -20,14 +20,31 @@ namespace XRay
 
         size_t size() const
         {
-            if (!_first || !_last || _last < _first) return 0;
-            return static_cast<size_t>(_last - _first);
+            __try
+            {
+                if (!_first || !_last || _last < _first) return 0;
+                if (IsBadReadPtr(_first, sizeof(T))) return 0;
+                size_t count = static_cast<size_t>(_last - _first);
+                return (count > 20000) ? 0 : count;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return 0;
+            }
         }
 
         T at(size_t index) const
         {
-            if (index >= size()) return nullptr;
-            return _first[index];
+            __try
+            {
+                if (index >= size()) return nullptr;
+                if (IsBadReadPtr(_first + index, sizeof(T))) return nullptr;
+                return _first[index];
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return nullptr;
+            }
         }
 
         bool empty() const { return size() == 0; }
@@ -37,6 +54,15 @@ namespace XRay
     struct CObject;
     struct CEntityAlive;
     struct CActor;
+
+    enum class EntityRelation
+    {
+        Unknown,
+        Friend,    // Loners, Allies, Traders
+        Neutral,   // Duty, Freedom, Ecologists
+        Enemy,     // Bandits, Monolith, Mercenaries, Military, Zombied
+        Mutant     // Monsters
+    };
 
     // Helper function to safely read X-Ray shared_str
     static inline const char* SafeReadSharedStr(uintptr_t pSharedStr)

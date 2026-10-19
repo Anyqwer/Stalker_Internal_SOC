@@ -19,6 +19,7 @@ namespace Features
         static void DrawSnapline(const XRay::Fvector2& screenPos, ImU32 color, int snaplinePos);
         static void DrawFovCircle(float fovRadius, ImU32 color);
         static void DrawCustomCrosshair(ImU32 color);
+        static void DrawOffscreenArrow(const XRay::Fvector& targetPos, ImU32 color);
 
         // Bone skeleton rendering & dynamic bounding box calculation
         static bool DrawSkeletonAndGetBounds(XRay::CObject* pObj, ImDrawList* pDrawList, ImU32 color,
