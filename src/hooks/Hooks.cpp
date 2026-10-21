@@ -368,51 +368,50 @@ namespace Hooks
         // Render cheat frame
         if (Core::g_bInitialized)
         {
-            ImGuiIO& io = ImGui::GetIO();
-
-            // Software cursor when menu is open
-            io.MouseDrawCursor = g_Config.bShowMenu;
-
-            if (g_Config.bShowMenu)
-            {
-                ClipCursor(nullptr);
-            }
-
-            ImGui_ImplDX9_NewFrame();
-            ImGui_ImplWin32_NewFrame();
-
-            // Feed mouse state to ImGui when menu is open
-            if (g_Config.bShowMenu)
-            {
-                POINT mousePt;
-                if (GetCursorPos(&mousePt))
-                {
-                    ScreenToClient(Core::g_hGameWindow, &mousePt);
-                    io.AddMousePosEvent(static_cast<float>(mousePt.x), static_cast<float>(mousePt.y));
-                }
-
-                io.AddMouseButtonEvent(0, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-                io.AddMouseButtonEvent(1, (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
-                io.AddMouseButtonEvent(2, (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
-            }
-
-            ImGui::NewFrame();
-
-            // Run features safely guarded against dangling pointers / level switches
             __try
             {
+                ImGuiIO& io = ImGui::GetIO();
+
+                // Software cursor when menu is open
+                io.MouseDrawCursor = g_Config.bShowMenu;
+
+                if (g_Config.bShowMenu)
+                {
+                    ClipCursor(nullptr);
+                }
+
+                ImGui_ImplDX9_NewFrame();
+                ImGui_ImplWin32_NewFrame();
+
+                // Feed mouse state to ImGui when menu is open
+                if (g_Config.bShowMenu)
+                {
+                    POINT mousePt;
+                    if (GetCursorPos(&mousePt))
+                    {
+                        ScreenToClient(Core::g_hGameWindow, &mousePt);
+                        io.AddMousePosEvent(static_cast<float>(mousePt.x), static_cast<float>(mousePt.y));
+                    }
+
+                    io.AddMouseButtonEvent(0, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+                    io.AddMouseButtonEvent(1, (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+                    io.AddMouseButtonEvent(2, (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+                }
+
+                ImGui::NewFrame();
+
                 Features::Aimbot::Update();
                 Features::Misc::Update();
                 Features::Visuals::Render();
                 UI::Menu::Render();
+
+                ImGui::EndFrame();
+                ImGui::Render();
+                ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
             }
             __except (EXCEPTION_EXECUTE_HANDLER)
             {
             }
-
-            ImGui::EndFrame();
-            ImGui::Render();
-            ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
         }
 
         return s_oEndScene(pDevice);

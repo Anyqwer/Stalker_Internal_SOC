@@ -75,28 +75,46 @@ set(ALL_SOURCES
     ${SOURCES_MINHOOK}
 )
 
-add_library(${PROJECT_NAME} SHARED ${ALL_SOURCES})
-
-# Windows libraries (Direct3D 9, DirectInput 8, User32, Gdi32)
-target_link_libraries(${PROJECT_NAME} PRIVATE
+# Target 1: S.T.A.L.K.E.R. Shadow of Chernobyl (X-Ray 1.0006)
+add_library(Stalker_Internal_SOC SHARED ${ALL_SOURCES})
+target_compile_definitions(Stalker_Internal_SOC PRIVATE XRAY_SOC=1)
+target_link_libraries(Stalker_Internal_SOC PRIVATE
     d3d9
     dinput8
     dxguid
     user32
     gdi32
 )
-
-# Compiler options
 if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE
+    target_compile_options(Stalker_Internal_SOC PRIVATE
         /W3
         /MP
         /EHsc
     )
 endif()
-
-# Set output name
-set_target_properties(${PROJECT_NAME} PROPERTIES
+set_target_properties(Stalker_Internal_SOC PROPERTIES
     OUTPUT_NAME "Stalker_Internal_SOC"
+    PREFIX ""
+)
+
+# Target 2: S.T.A.L.K.E.R. Call of Pripyat (X-Ray 1.6)
+add_library(Stalker_Internal_COP SHARED ${ALL_SOURCES})
+target_compile_definitions(Stalker_Internal_COP PRIVATE XRAY_COP=1)
+target_link_libraries(Stalker_Internal_COP PRIVATE
+    d3d9
+    dinput8
+    dxguid
+    user32
+    gdi32
+)
+if(MSVC)
+    target_compile_options(Stalker_Internal_COP PRIVATE
+        /W3
+        /MP
+        /EHsc
+    )
+endif()
+set_target_properties(Stalker_Internal_COP PROPERTIES
+    OUTPUT_NAME "Stalker_Internal_COP"
     PREFIX ""
 )

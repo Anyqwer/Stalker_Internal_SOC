@@ -1,14 +1,22 @@
-# Stalker_Internal_SOC
+# Stalker_Internal_Suite (Shadow of Chernobyl & Call of Pripyat)
 
-A high-performance internal modification suite, reverse engineering toolkit, and runtime SDK for S.T.A.L.K.E.R.: Shadow of Chernobyl (v1.0006, 32-bit x86, DirectX 9) built with C++20, DirectX 9 Virtual Method Table (VMT) Hooking, DirectInput 8 Interception, Dear ImGui, and MinHook.
+A high-performance internal modification suite, reverse engineering toolkit, and runtime SDK for S.T.A.L.K.E.R.: Shadow of Chernobyl (v1.0006, X-Ray 1.0) and S.T.A.L.K.E.R.: Call of Pripyat (v1.6.02, X-Ray 1.6) built with C++20, DirectX 9 Virtual Method Table (VMT) Hooking, DirectInput 8 Interception, Dear ImGui, and MinHook.
 
-Operating directly inside the virtual address space of XR_3DA.exe, it achieves zero-latency frame-synchronized rendering, seamless input routing without game camera spin, direct memory interaction with proprietary X-Ray Engine classes, and crash-proof execution protected by Structured Exception Handling (SEH).
+Operating directly inside the virtual address space of XR_3DA.exe (SoC) or xrEngine.exe (CoP), it achieves zero-latency frame-synchronized rendering, seamless input routing without game camera spin, direct memory interaction with proprietary X-Ray Engine classes, and crash-proof execution protected by Structured Exception Handling (SEH).
 
 ---
 
-## Version 2.0 (Project Medusa Edition)
+## Cross-Engine Support
 
-Version 2.0 expands the project from a lightweight ESP and trainer into a comprehensive Rage, Spawner, and Visuals suite engineered for deep compatibility with the X-Ray 1.0006 engine architecture.
+The suite compiles into two dedicated 32-bit (x86) dynamic link libraries from a unified codebase:
+- Stalker_Internal_SOC.dll: Tailored for S.T.A.L.K.E.R.: Shadow of Chernobyl (Patch 1.0006, XR_3DA.exe).
+- Stalker_Internal_COP.dll: Tailored for S.T.A.L.K.E.R.: Call of Pripyat (Patch 1.6.02, xrEngine.exe, DirectX 9/10/11 backends via D3D9/DXGI hooks).
+
+---
+
+## Version 2.0 (Project Medusa Multi-Engine Edition)
+
+Version 2.0 expands the project from a lightweight ESP and trainer into a comprehensive Rage, Spawner, and Visuals suite engineered for deep compatibility with both X-Ray 1.0006 and X-Ray 1.6 engine architectures.
 
 ---
 
@@ -115,7 +123,7 @@ Stalker_Internal_SOC/
 
 ### Requirements
 - Operating System: Windows 10 / Windows 11 (64-bit OS running 32-bit game)
-- Target Architecture: Win32 / x86 (Strict requirement for S.T.A.L.K.E.R. 1.0006 XR_3DA.exe)
+- Target Architecture: Win32 / x86 (Strict requirement for X-Ray 32-bit engines)
 - Compiler: Visual Studio 2022 (MSVC v143+) with C++ Desktop Development tools
 - Build System: CMake 3.24+
 
@@ -126,9 +134,10 @@ Run the automated build script from the repository root:
 ```cmd
 build.bat
 ```
-The compiled library will be output to:
+The compiled libraries will be output to:
 ```text
-build\Release\Stalker_Internal_SOC.dll
+build\Release\Stalker_Internal_SOC.dll (Shadow of Chernobyl)
+build\Release\Stalker_Internal_COP.dll (Call of Pripyat)
 ```
 
 #### Option 2: Manual CMake Configuration
@@ -141,13 +150,23 @@ cmake --build build --config Release
 
 ## Injection Instructions
 
+### S.T.A.L.K.E.R.: Shadow of Chernobyl
 1. Launch S.T.A.L.K.E.R.: Shadow of Chernobyl (Patch 1.0006, Steam, GOG, or Retail).
 2. Load any saved game or start a new game session.
 3. Use a standard 32-bit DLL injector (such as System Informer, Process Hacker, or Xenos):
    - Target Process: XR_3DA.exe
    - Module Architecture: x86 (32-bit)
-   - Selected Library: Stalker_Internal_SOC.dll
+   - Selected Library: build\Release\Stalker_Internal_SOC.dll
 4. The debug console will initialize and the user interface will render over the game viewport.
+
+### S.T.A.L.K.E.R.: Call of Pripyat
+1. Launch S.T.A.L.K.E.R.: Call of Pripyat (Patch 1.6.02, Steam, GOG, or Retail).
+2. Load any saved game or start a new game session.
+3. Use a standard 32-bit DLL injector (such as System Informer, Process Hacker, or Xenos):
+   - Target Process: xrEngine.exe
+   - Module Architecture: x86 (32-bit)
+   - Selected Library: build\Release\Stalker_Internal_COP.dll
+4. Press INSERT in-game to toggle the Project Medusa menu.
 
 ---
 

@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ========================================================
-echo       Building Stalker_Internal_SOC (Release x86)
+echo       Building Stalker_Internal Suite (SOC + COP Release x86)
 echo ========================================================
 
 set "CMAKE_EXE=cmake"
@@ -29,7 +29,7 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-echo [2/2] Compiling Stalker_Internal_SOC (Release)...
+echo [2/2] Compiling Stalker_Internal Suite (Release)...
 "%CMAKE_EXE%" --build build --config Release
 if %errorlevel% neq 0 (
     echo [ERROR] Build failed.
@@ -37,6 +37,7 @@ if %errorlevel% neq 0 (
 )
 
 echo ========================================================
-echo Build Successful! Binary located at:
-echo build\Release\Stalker_Internal_SOC.dll
+echo Build Successful! Binaries located at:
+echo build\Release\Stalker_Internal_SOC.dll (Shadow of Chernobyl)
+echo build\Release\Stalker_Internal_COP.dll (Call of Pripyat)
 echo ========================================================

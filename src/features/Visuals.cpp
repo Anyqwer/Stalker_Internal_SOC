@@ -230,32 +230,25 @@ namespace Features
             if (!vtbl || IsBadReadPtr(vtbl, sizeof(void*) * 8))
                 return false;
 
-            // VMT index 6 is dcast_PKinematics (index 5 is Spawn)
+#if defined(XRAY_COP)
+            // In X-Ray 1.6 (CoP), dcast_PKinematics is at vtbl[3] and uses __stdcall
+            typedef void* (__stdcall* t_dcast_PKinematics)(void* thisPtr);
+            auto dcast = reinterpret_cast<t_dcast_PKinematics>(vtbl[3]);
+#else
+            // In X-Ray 1.0 (SoC), dcast_PKinematics is at vtbl[6] and uses __thiscall
             typedef void* (__thiscall* t_dcast_PKinematics)(void* thisPtr);
             auto dcast = reinterpret_cast<t_dcast_PKinematics>(vtbl[6]);
+#endif
             void* pKinematics = dcast(reinterpret_cast<void*>(visual));
-            if (!pKinematics || IsBadReadPtr(pKinematics, 0x90))
+            if (!pKinematics || IsBadReadPtr(pKinematics, 0x40))
                 return false;
 
-            uintptr_t kAddr = reinterpret_cast<uintptr_t>(pKinematics);
-            uintptr_t boneInstances = *reinterpret_cast<uintptr_t*>(kAddr + 0x84);
-            if (!boneInstances || IsBadReadPtr(reinterpret_cast<void*>(boneInstances), sizeof(XRay::CBoneInstance)))
+            auto k = reinterpret_cast<XRay::CKinematics*>(pKinematics);
+            XRay::CBoneInstance* boneInstances = k->bone_instances;
+            if (!boneInstances || IsBadReadPtr(boneInstances, sizeof(XRay::CBoneInstance)))
                 return false;
 
-            // In X-Ray 1.0006 CKinematics:
-            // Offset 0x88 is a pointer to xr_vector<CBoneData*> (vecBones*)
-            // Inside the vector, +0x04 is _first and +0x08 is _last
-            uintptr_t pBoneDataVec = *reinterpret_cast<uintptr_t*>(kAddr + 0x88);
-            if (!pBoneDataVec || IsBadReadPtr(reinterpret_cast<void*>(pBoneDataVec), 0x10))
-                return false;
-
-            XRay::CBoneData** boneDataFirst = *reinterpret_cast<XRay::CBoneData***>(pBoneDataVec + 0x04);
-            XRay::CBoneData** boneDataLast = *reinterpret_cast<XRay::CBoneData***>(pBoneDataVec + 0x08);
-
-            if (!boneDataFirst || !boneDataLast || boneDataLast <= boneDataFirst)
-                return false;
-
-            size_t boneCount = boneDataLast - boneDataFirst;
+            size_t boneCount = k->GetBoneCount();
             if (boneCount == 0 || boneCount > 128)
                 return false;
 
@@ -272,11 +265,9 @@ namespace Features
 
             for (size_t i = 0; i < boneCount; ++i)
             {
-                // Each CBoneInstance is 0xA0 (160) bytes
-                // Transform matrix is at offset 0x00, position is row 4: _41, _42, _43 (offset 0x30, 0x34, 0x38)
-                float lx = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x30);
-                float ly = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x34);
-                float lz = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x38);
+                float lx = boneInstances[i].mTransform._41;
+                float ly = boneInstances[i].mTransform._42;
+                float lz = boneInstances[i].mTransform._43;
 
                 XRay::Fvector localBone(lx, ly, lz);
                 XRay::Fvector worldBone;
@@ -330,7 +321,7 @@ namespace Features
                 {
                     if (!screenBones[i].valid) continue;
 
-                    XRay::CBoneData* pData = boneDataFirst[i];
+                    XRay::CBoneData* pData = k->GetBoneData(i);
                     if (!pData || IsBadReadPtr(pData, sizeof(XRay::CBoneData))) continue;
 
                     uint16_t parentId = pData->parent_id;
@@ -506,19 +497,24 @@ namespace Features
 
         // 2. Human Characters
         bool isHuman = false;
-        if (strstr(visualLower, "actor") || strstr(visualLower, "stalker") || strstr(visualLower, "hero"))
+        if (strstr(visualLower, "actor") || strstr(visualLower, "stalker") || strstr(visualLower, "hero") ||
+            strstr(visualLower, "human") || strstr(visualLower, "characters"))
         {
             isHuman = true;
         }
         else if (strstr(sectLower, "stalker") || strstr(sectLower, "bandit") || strstr(sectLower, "soldier") ||
                  strstr(sectLower, "military") || strstr(sectLower, "monolith") || strstr(sectLower, "merc") ||
-                 strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(sectLower, "freedom") ||
-                 strstr(sectLower, "zombied") || strstr(sectLower, "novice") || strstr(sectLower, "veteran") ||
-                 strstr(sectLower, "master") || strstr(sectLower, "guard") || strstr(sectLower, "commander") ||
+                 strstr(sectLower, "killer") || strstr(sectLower, "dolg") || strstr(sectLower, "duty") ||
+                 strstr(sectLower, "freedom") || strstr(sectLower, "zombied") || strstr(sectLower, "novice") ||
+                 strstr(sectLower, "veteran") || strstr(sectLower, "master") || strstr(sectLower, "guard") ||
+                 strstr(sectLower, "commander") ||
+                 strncmp(sectLower, "sim_default_", 12) == 0 ||
+                 strncmp(sectLower, "zat_", 4) == 0 || strncmp(sectLower, "jup_", 4) == 0 ||
+                 strncmp(sectLower, "pri_", 4) == 0 || strncmp(sectLower, "pas_", 4) == 0 ||
                  strncmp(sectLower, "esc_", 4) == 0 || strncmp(sectLower, "gar_", 4) == 0 ||
                  strncmp(sectLower, "agr_", 4) == 0 || strncmp(sectLower, "val_", 4) == 0 ||
                  strncmp(sectLower, "bar_", 4) == 0 || strncmp(sectLower, "mil_", 4) == 0 ||
-                 strncmp(sectLower, "rad_", 4) == 0 || strncmp(sectLower, "pri_", 4) == 0)
+                 strncmp(sectLower, "rad_", 4) == 0)
         {
             isHuman = true;
         }
@@ -527,9 +523,9 @@ namespace Features
         {
             if (strstr(sectLower, "bandit") || strstr(visualLower, "bandit") || strstr(nameLower, "bandit"))
                 return EntityCategory::Bandit;
-            if (strstr(sectLower, "monolith") || strstr(visualLower, "monolith") || strstr(nameLower, "monolith"))
+            if (strstr(sectLower, "monolith") || strstr(sectLower, "monolit") || strstr(visualLower, "monolith") || strstr(visualLower, "monolit") || strstr(nameLower, "monolith") || strstr(nameLower, "monolit"))
                 return EntityCategory::Monolith;
-            if (strstr(sectLower, "merc") || strstr(sectLower, "killer") || strstr(visualLower, "merc"))
+            if (strstr(sectLower, "merc") || strstr(sectLower, "killer") || strstr(visualLower, "merc") || strstr(visualLower, "killer") || strstr(nameLower, "killer"))
                 return EntityCategory::Mercenary;
             if (strstr(sectLower, "military") || strstr(sectLower, "soldier") || strstr(visualLower, "soldier") || strstr(sectLower, "voen"))
                 return EntityCategory::Military;
@@ -537,14 +533,14 @@ namespace Features
                 return EntityCategory::Zombie;
             if (strstr(sectLower, "freedom") || strstr(sectLower, "svoboda") || strstr(visualLower, "freedom"))
                 return EntityCategory::Freedom;
-            if (strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(visualLower, "dolg"))
+            if (strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(visualLower, "dolg") || strstr(visualLower, "duty"))
                 return EntityCategory::Duty;
 
             return EntityCategory::Stalker;
         }
 
         // 3. Weapons
-        if (strncmp(sectLower, "wpn_", 4) == 0 || strstr(visualLower, "weapons"))
+        if (strncmp(sectLower, "wpn_", 4) == 0 || strstr(visualLower, "weapons") || strstr(sectLower, "weapon"))
         {
             return EntityCategory::Weapon;
         }
@@ -698,6 +694,35 @@ namespace Features
                 return;
             }
 
+            // Check health & dead state for living entities
+            bool isDead = false;
+            if (isLiving)
+            {
+                uintptr_t pConditions = 0;
+                if (Core::Memory::SafeRead(objAddr + XRay::OFF_ACTOR_COND, pConditions) && pConditions && !IsBadReadPtr(reinterpret_cast<void*>(pConditions), 0x20))
+                {
+                    float hp = 1.0f;
+                    float hpMax = 1.0f;
+                    if (Core::Memory::SafeRead(pConditions + XRay::OFF_COND_HP, hp))
+                    {
+                        if (hp <= 0.0f)
+                        {
+                            isDead = true;
+                            boxColor = IM_COL32(140, 140, 140, 160);
+                            typeTag = "Corpse";
+                        }
+                        if (Core::Memory::SafeRead(pConditions + XRay::OFF_COND_HPMAX, hpMax) && hpMax > 0.001f)
+                        {
+                            healthRatio = std::clamp(hp / hpMax, 0.0f, 1.0f);
+                        }
+                        else
+                        {
+                            healthRatio = std::clamp(hp, 0.0f, 1.0f);
+                        }
+                    }
+                }
+            }
+
             // Screen coordinates calculation
             float boxX = 0, boxY = 0, boxW = 0, boxH = 0;
             XRay::Fvector2 screenFeet;
@@ -839,33 +864,9 @@ namespace Features
         XRay::Fvector localCamPos = XRay::Engine::GetCameraPosition();
         XRay::CObject* pActor = XRay::Engine::GetCurrentEntity();
 
-        // 1. Iterate active level objects
-        XRay::xr_vector<XRay::CObject*>* pActiveObjs = XRay::Engine::GetActiveObjects();
-        if (pActiveObjs)
-        {
-            __try
-            {
-                size_t activeCount = pActiveObjs->size();
-                if (activeCount > 0 && activeCount < 20000)
-                {
-                    for (size_t i = 0; i < activeCount; ++i)
-                    {
-                        XRay::CObject* pObj = pActiveObjs->at(i);
-                        if (pObj && pObj != pActor)
-                        {
-                            ProcessObject(pObj, pDrawList, localCamPos);
-                        }
-                    }
-                }
-            }
-            __except (EXCEPTION_EXECUTE_HANDLER)
-            {
-            }
-        }
-
-        // 2. Fallback to total objects if active list was empty
+        // 1. Iterate all level objects (active + sleeping)
         uint32_t totalCount = XRay::Engine::GetTotalObjectCount();
-        if ((!pActiveObjs || pActiveObjs->size() == 0) && totalCount > 0 && totalCount < 20000)
+        if (totalCount > 0 && totalCount < 20000)
         {
             __try
             {
@@ -880,6 +881,49 @@ namespace Features
             }
             __except (EXCEPTION_EXECUTE_HANDLER)
             {
+            }
+        }
+        else
+        {
+            // 2. Fallback: direct vector iteration (active objects + sleeping objects)
+            XRay::xr_vector<XRay::CObject*>* pActiveObjs = XRay::Engine::GetActiveObjects();
+            if (pActiveObjs)
+            {
+                __try
+                {
+                    size_t activeCount = pActiveObjs->size();
+                    for (size_t i = 0; i < activeCount && i < 20000; ++i)
+                    {
+                        XRay::CObject* pObj = pActiveObjs->at(i);
+                        if (pObj && pObj != pActor)
+                        {
+                            ProcessObject(pObj, pDrawList, localCamPos);
+                        }
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                }
+            }
+
+            XRay::xr_vector<XRay::CObject*>* pSleepingObjs = XRay::Engine::GetSleepingObjects();
+            if (pSleepingObjs)
+            {
+                __try
+                {
+                    size_t sleepCount = pSleepingObjs->size();
+                    for (size_t i = 0; i < sleepCount && i < 20000; ++i)
+                    {
+                        XRay::CObject* pObj = pSleepingObjs->at(i);
+                        if (pObj && pObj != pActor)
+                        {
+                            ProcessObject(pObj, pDrawList, localCamPos);
+                        }
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                }
             }
         }
     }

@@ -540,6 +540,288 @@ namespace UI
         const char* group;
     };
 
+#if defined(XRAY_COP)
+    static const ZoneLordItem s_Weapons[] = {
+        { "ПМ (Пистолет Макарова)", "wpn_pm", "Пистолеты" },
+        { "ПБ (Бесшумный)", "wpn_pb", "Пистолеты" },
+        { "Форт-12", "wpn_fort", "Пистолеты" },
+        { "Beretta 92FS (Марта)", "wpn_beretta", "Пистолеты" },
+        { "HPSA (Браунинг)", "wpn_hpsa", "Пистолеты" },
+        { "Walther P99 (Волкер)", "wpn_walther", "Пистолеты" },
+        { "Colt 1911 (Кора)", "wpn_colt1911", "Пистолеты" },
+        { "SIG Sauer P220 (СИП)", "wpn_sig220", "Пистолеты" },
+        { "USP Compact (УДП)", "wpn_usp", "Пистолеты" },
+        { "Desert Eagle (Черный ястреб)", "wpn_desert_eagle", "Пистолеты" },
+        { "MP5 (Гадюка-5)", "wpn_mp5", "Дробовики & ПП" },
+        { "БМ-16 (Двустволка)", "wpn_bm16", "Дробовики & ПП" },
+        { "ТОЗ-34 (Охотничье ружье)", "wpn_toz34", "Дробовики & ПП" },
+        { "Winchester 1300 (Чейзер-13)", "wpn_wincheaster1300", "Дробовики & ПП" },
+        { "SPAS-12 (СПСА-14)", "wpn_spas12", "Дробовики & ПП" },
+        { "Protecta (Отбойник)", "wpn_protecta", "Дробовики & ПП" },
+        { "АКС-74У", "wpn_ak74u", "Автоматы" },
+        { "АК-74", "wpn_ak74", "Автоматы" },
+        { "АН-94 Абакан", "wpn_abakan", "Автоматы" },
+        { "L85 (ИЛ 86)", "wpn_l85", "Автоматы" },
+        { "LR-300 (ТРс-301)", "wpn_lr300", "Автоматы" },
+        { "SIG SG 550 (СГИ-5к)", "wpn_sig550", "Автоматы" },
+        { "G36 (ГП 37)", "wpn_g36", "Автоматы" },
+        { "ОЦ-14 Гроза", "wpn_groza", "Автоматы" },
+        { "АС ВАЛ", "wpn_val", "Автоматы" },
+        { "FN F2000 (ФТ-200М)", "wpn_fn2000", "Автоматы" },
+        { "ВСС Винторез", "wpn_vintorez", "Снайперские" },
+        { "СВД", "wpn_svd", "Снайперские" },
+        { "СВУ", "wpn_svu", "Снайперские" },
+        { "Гаусс-пушка", "wpn_gauss", "Снайперские" },
+        { "ПКМ (Пулемет Калашникова)", "wpn_pkm", "Тяжелое & Взрывчатка" },
+        { "РПГ-7", "wpn_rpg7", "Тяжелое & Взрывчатка" },
+        { "РГ-6 (Бульдог-6)", "wpn_rg-6", "Тяжелое & Взрывчатка" },
+        { "Граната Ф-1", "grenade_f1", "Тяжелое & Взрывчатка" },
+        { "Граната РГД-5", "grenade_rgd5", "Тяжелое & Взрывчатка" },
+    };
+
+    static const ZoneLordItem s_UniqueWeapons[] = {
+        { "ПМ Наградной (Актера)", "wpn_pm_actor", "Пистолеты" },
+        { "Форт-12 (Коряги)", "wpn_fort_snag", "Пистолеты" },
+        { "SIG Sauer Альпиец (Шустрый)", "wpn_sig220_nimble", "Пистолеты" },
+        { "USP Марш (Шустрый)", "wpn_usp_nimble", "Пистолеты" },
+        { "Desert Eagle Степной орел (Шустрый)", "wpn_desert_eagle_nimble", "Пистолеты" },
+        { "MP5 Фрезер (Шустрый)", "wpn_mp5_nimble", "ПП" },
+        { "Winchester Хищник (Зверобой)", "wpn_wincheaster1300_trapper", "Дробовики" },
+        { "SPAS-12 Карабинер (Шустрый)", "wpn_spas12_nimble", "Дробовики" },
+        { "Protecta Карабинер (Шустрый)", "wpn_protecta_nimble", "Дробовики" },
+        { "АКС-74У (Коряги)", "wpn_ak74u_snag", "Автоматы" },
+        { "Гроза Шторм (Шустрый)", "wpn_groza_nimble", "Автоматы" },
+        { "Гроза Спецназ", "wpn_groza_specops", "Автоматы" },
+        { "SIG SG 550 Стрелка", "wpn_sig550_luckygun", "Автоматы" },
+        { "G36 Смерч (Шустрый)", "wpn_g36_nimble", "Автоматы" },
+        { "FN F2000 (Шустрый)", "wpn_fn2000_nimble", "Автоматы" },
+        { "Винторез Прибой (Шустрый)", "wpn_vintorez_nimble", "Снайперские" },
+        { "СВУ Громобой (Шустрый)", "wpn_svu_nimble", "Снайперские" },
+        { "СВД Рысь (Шустрый)", "wpn_svd_nimble", "Снайперские" },
+        { "ПКМ Зулуса", "wpn_pkm_zulus", "Тяжелое" },
+        { "Гаусс-пушка (Неизвестное оружие)", "pri_a17_gauss_rifle", "Специальное" },
+    };
+
+    static const ZoneLordItem s_Attachments[] = {
+        { "Оптический прицел ПСО-1", "wpn_addon_scope", "Прицелы" },
+        { "Прицел SUSAT (НАТО)", "wpn_addon_scope_susat", "Прицелы" },
+        { "Прицел SUSAT Custom", "wpn_addon_scope_susat_custom", "Прицелы" },
+        { "Прицел SUSAT Ночной", "wpn_addon_scope_susat_night", "Прицелы" },
+        { "Прицел SUSAT Сумеречный", "wpn_addon_scope_susat_dusk", "Прицелы" },
+        { "Прицел НСПУ (Ночной)", "wpn_addon_scope_night", "Прицелы" },
+        { "Прицел с детектором", "wpn_addon_scope_detector", "Прицелы" },
+        { "Глушитель", "wpn_addon_silencer", "Глушители" },
+        { "Подствольник ГП-25 Костер", "wpn_addon_grenade_launcher", "Подствольники" },
+        { "Подствольник M203 (НАТО)", "wpn_addon_grenade_launcher_m203", "Подствольники" },
+    };
+
+    static const ZoneLordItem s_Ammo[] = {
+        { "9x18 мм FMJ", "ammo_9x18_fmj", "Пистолетные" },
+        { "9x18 мм PMM", "ammo_9x18_pmm", "Пистолетные" },
+        { "9x19 мм FMJ", "ammo_9x19_fmj", "Пистолетные" },
+        { "9x19 мм PBP", "ammo_9x19_pbp", "Пистолетные" },
+        { ".45 ACP FMJ", "ammo_11.43x23_fmj", "Пистолетные" },
+        { ".45 ACP Hydro-Shock", "ammo_11.43x23_hydro", "Пистолетные" },
+        { "12x70 Дробь", "ammo_12x70_buck", "Дробовые" },
+        { "12x76 Жекан", "ammo_12x76_zhekan", "Дробовые" },
+        { "5.45x39 мм FMJ", "ammo_5.45x39_fmj", "Автоматные" },
+        { "5.45x39 мм БП", "ammo_5.45x39_ap", "Автоматные" },
+        { "5.56x45 мм SS109", "ammo_5.56x45_ss190", "Автоматные" },
+        { "5.56x45 мм AP", "ammo_5.56x45_ap", "Автоматные" },
+        { "7.62x54 мм 7H1 (Снайперские)", "ammo_7.62x54_7h1", "Винтовочные" },
+        { "7.62x54 мм БП", "ammo_7.62x54_ap", "Винтовочные" },
+        { "Лента 100 патронов ПКМ", "ammo_pkm_100", "Пулеметные" },
+        { "9x39 мм СП-5", "ammo_9x39_sp5", "Специальные" },
+        { "9x39 мм СП-6 (Бронебойные)", "ammo_9x39_ap", "Специальные" },
+        { "9x39 мм ПАБ-9", "ammo_9x39_pab9", "Специальные" },
+        { "Гаусс-патроны", "ammo_gauss", "Специальные" },
+        { "Гаусс-патроны Кустарные (Кардан)", "ammo_gauss_cardan", "Специальные" },
+        { "Заряд ОГ-7В (РПГ-7)", "ammo_og-7b", "Гранатометные" },
+        { "ВОГ-25", "ammo_vog-25", "Гранатометные" },
+        { "M209 (НАТО)", "ammo_m209", "Гранатометные" },
+    };
+
+    static const ZoneLordItem s_Outfits[] = {
+        { "Кожаная куртка", "novice_outfit", "Костюмы" },
+        { "Комбинезон 'Заря'", "stalker_outfit", "Костюмы" },
+        { "Комбинезон 'Заря' (Баржи)", "stalker_outfit_barge", "Костюмы" },
+        { "Комбинезон 'Ветер Свободы'", "svoboda_light_outfit", "Костюмы" },
+        { "Бронекостюм 'Страж Свободы'", "svoboda_heavy_outfit", "Костюмы" },
+        { "Броня 'Долга' ПС5-М", "dolg_outfit", "Костюмы" },
+        { "Тяжелый бронекостюм 'Долга' ПСЗ-9д", "dolg_heavy_outfit", "Костюмы" },
+        { "Комбинезон 'СЕВА'", "scientific_outfit", "Научные" },
+        { "Бронекостюм ЧН-3а", "cs_heavy_outfit", "Тяжелая броня" },
+        { "Армейский бронекостюм Берилл-5М", "specops_outfit", "Военная броня" },
+        { "Армейский бронекостюм СКАТ-9М", "military_outfit", "Военная броня" },
+        { "Экзоскелет", "exo_outfit", "Экзоскелеты" },
+        { "Противогаз", "helm_respirator", "Шлемы" },
+        { "Противогаз (Шутника)", "helm_respirator_joker", "Шлемы" },
+        { "Стальной шлем", "helm_hardhat", "Шлемы" },
+        { "Стальной шлем (Коряги)", "helm_hardhat_snag", "Шлемы" },
+        { "Шлем 'Заслон'", "helm_protective", "Шлемы" },
+        { "Шлем 'Сфера-08'", "helm_battle", "Шлемы" },
+        { "Тактический шлем", "helm_tactic", "Шлемы" },
+    };
+
+    static const ZoneLordItem s_MonsterParts[] = {
+        { "Детектор 'Отклик'", "detector_simple", "Детекторы" },
+        { "Детектор 'Медведь'", "detector_advanced", "Детекторы" },
+        { "Детектор 'Велес'", "detector_elite", "Детекторы" },
+        { "Детектор 'Сварог'", "detector_scientific", "Детекторы" },
+        { "Инструменты для грубой работы", "toolkit_1", "Инструменты" },
+        { "Инструменты для тонкой работы", "toolkit_2", "Инструменты" },
+        { "Инструменты для калибровки", "toolkit_3", "Инструменты" },
+    };
+
+    static const ZoneLordItem s_QuestItems[] = {
+        { "Инструменты для грубой работы", "toolkit_1", "Инструменты" },
+        { "Инструменты для тонкой работы", "toolkit_2", "Инструменты" },
+        { "Инструменты для калибровки", "toolkit_3", "Инструменты" },
+        { "Документы по проекту X-8 (№1)", "pri_a15_documents_1", "Документы X-8" },
+        { "Документы по проекту X-8 (№2)", "pri_a15_documents_2", "Документы X-8" },
+        { "Документы по проекту X-8 (№3)", "pri_a15_documents_3", "Документы X-8" },
+        { "Документы по проекту X-8 (№4)", "pri_a15_documents_4", "Документы X-8" },
+        { "Документы по проекту X-8 (№5)", "pri_a15_documents_5", "Документы X-8" },
+        { "Записка Соколова", "jup_b205_sokolov_note", "Квестовые" },
+        { "Карты глубинного рейда", "zat_b100_military_1", "Квестовые" },
+        { "Неизвестное оружие (Гаусс)", "pri_a17_gauss_rifle", "Спецпредметы" },
+    };
+
+    static const ZoneLordItem s_Artifacts[] = {
+        { "Медуза", "af_medusa", "Гравитационные" },
+        { "Каменный цветок", "af_cristall_flower", "Гравитационные" },
+        { "Ночная звезда", "af_night_star", "Гравитационные" },
+        { "Выверт", "af_vyvert", "Гравитационные" },
+        { "Грави", "af_gravi", "Гравитационные" },
+        { "Золотая рыбка", "af_gold_fish", "Гравитационные" },
+        { "Кровь камня", "af_blood", "Органические" },
+        { "Ломоть мяса", "af_mincer_meat", "Органические" },
+        { "Душа", "af_soul", "Органические" },
+        { "Колобок", "af_fuzz_kolobok", "Органические" },
+        { "Пузырь", "af_baloon", "Органические" },
+        { "Светляк", "af_glass", "Органические" },
+        { "Бенгальский огонь", "af_electra_sparkler", "Электрические" },
+        { "Вспышка", "af_electra_flash", "Электрические" },
+        { "Лунный свет", "af_electra_moonlight", "Электрические" },
+        { "Батарейка", "af_dummy_battery", "Электрические" },
+        { "Пустышка", "af_dummy_dummy", "Электрические" },
+        { "Снежинка", "af_ice", "Электрические" },
+        { "Кристалл", "af_cristall", "Термические" },
+        { "Огненный шар", "af_fireball", "Термические" },
+        { "Мамины бусы", "af_dummy_glassbeads", "Термические" },
+        { "Глаз", "af_eye", "Термические" },
+        { "Пламя", "af_fire", "Термические" },
+        { "Компас", "af_compass", "Уникальные" },
+        { "Сердце Оазиса", "af_oasis_heart", "Уникальные" },
+    };
+
+    static const ZoneLordItem s_Supplies[] = {
+        { "Аптечка (Индивидуальная)", "medkit", "Медицина" },
+        { "Аптечка армейская", "medkit_army", "Медицина" },
+        { "Аптечка научная", "medkit_scientic", "Медицина" },
+        { "Бинт", "bandage", "Медицина" },
+        { "Антирад", "antirad", "Медицина" },
+        { "Препарат Геркулес", "drug_booster", "Препараты" },
+        { "Препарат Барвинок", "drug_coagulant", "Препараты" },
+        { "Препарат Радиопротектор", "drug_radioprotector", "Препараты" },
+        { "Препарат Пси-блокада", "drug_psy_blockade", "Препараты" },
+        { "Препарат Антидот", "drug_antidot", "Препараты" },
+        { "Препарат Анабиотик", "drug_anabiotic", "Препараты" },
+        { "Водка 'Казаки'", "vodka", "Провизия" },
+        { "Энергетик Non Stop", "energy_drink", "Провизия" },
+        { "Батон", "bread", "Провизия" },
+        { "Колбаса 'Диетическая'", "kolbasa", "Провизия" },
+        { "Консервы 'Тушенка'", "conserva", "Провизия" },
+        { "Детектор 'Отклик'", "detector_simple", "Детекторы" },
+        { "Детектор 'Медведь'", "detector_advanced", "Детекторы" },
+        { "Детектор 'Велес'", "detector_elite", "Детекторы" },
+        { "Детектор 'Сварог'", "detector_scientific", "Детекторы" },
+        { "Инструменты для грубой работы", "toolkit_1", "Инструменты" },
+        { "Инструменты для тонкой работы", "toolkit_2", "Инструменты" },
+        { "Инструменты для калибровки", "toolkit_3", "Инструменты" },
+        { "Фонарик", "device_torch", "Снаряжение" },
+    };
+
+    static const ZoneLordItem s_Mutants[] = {
+        { "Кровосос (Обычный)", "bloodsucker_normal", "Опасные мутанты" },
+        { "Кровосос (Сильный)", "bloodsucker_strong", "Опасные мутанты" },
+        { "Снорк (Обычный)", "snork_normal", "Опасные мутанты" },
+        { "Снорк (Сильный)", "snork_strong", "Опасные мутанты" },
+        { "Псевдогигант", "gigant_normal", "Опасные мутанты" },
+        { "Контролер", "m_controller_normal", "Пси-мутанты" },
+        { "Полтергейст", "m_poltergeist_normal_tele", "Пси-мутанты" },
+        { "Полтергейст огненный", "m_poltergeist_normal_flame", "Пси-мутанты" },
+        { "Бюрер", "burer_normal", "Пси-мутанты" },
+        { "Химера", "chimera_normal", "Опасные мутанты" },
+        { "Псевдособака", "pseudodog_normal", "Звери" },
+        { "Пси-собака", "psy_dog_normal", "Звери" },
+        { "Слепой пес", "dog_normal", "Звери" },
+        { "Кабан (Сильный)", "boar_strong", "Звери" },
+        { "Плоть (Обычная)", "flesh_normal", "Звери" },
+        { "Тушкан", "tushkano_normal", "Мелкие мутанты" },
+    };
+
+    static const ZoneLordItem s_Stalkers[] = {
+        { "Одиночка (Новичок)", "sim_default_stalker_0", "Одиночки" },
+        { "Одиночка (Опытный)", "sim_default_stalker_1", "Одиночки" },
+        { "Одиночка (Ветеран)", "sim_default_stalker_2", "Одиночки" },
+        { "Одиночка (Мастер)", "sim_default_stalker_3", "Одиночки" },
+        { "Бандит (Новичок)", "sim_default_bandit_0", "Бандиты" },
+        { "Бандит (Опытный)", "sim_default_bandit_1", "Бандиты" },
+        { "Бандит (Ветеран)", "sim_default_bandit_2", "Бандиты" },
+        { "Бандит (Мастер)", "sim_default_bandit_3", "Бандиты" },
+        { "Боец 'Долга' (Рядовой)", "sim_default_duty_0", "Долг" },
+        { "Боец 'Долга' (Сержант)", "sim_default_duty_1", "Долг" },
+        { "Боец 'Долга' (Ветеран)", "sim_default_duty_2", "Долг" },
+        { "Боец 'Долга' (Мастер)", "sim_default_duty_3", "Долг" },
+        { "Боец 'Свободы' (Рядовой)", "sim_default_freedom_0", "Свобода" },
+        { "Боец 'Свободы' (Ветеран)", "sim_default_freedom_2", "Свобода" },
+        { "Боец 'Свободы' (Мастер)", "sim_default_freedom_3", "Свобода" },
+        { "Наемник (Ветеран)", "sim_default_killer_2", "Наемники" },
+        { "Наемник (Мастер)", "sim_default_killer_3", "Наемники" },
+        { "Монолитовец (Ветеран)", "sim_default_monolith_2", "Монолит" },
+        { "Монолитовец (Мастер)", "sim_default_monolith_3", "Монолит" },
+        { "Военный (Спецназ)", "sim_default_military_2", "Военные" },
+        { "Военный (Снайпер)", "sim_default_military_3_sniper", "Военные" },
+        { "Военный (Командир)", "sim_default_military_4", "Военные" },
+        { "Зомбированный (Сталкер)", "sim_default_zombied_1", "Зомбированные" },
+        { "Зомбированный (Ветеран)", "sim_default_zombied_3", "Зомбированные" },
+    };
+
+    struct ZoneLordTeleport {
+        const char* name;
+        const char* level;
+        float x, y, z;
+    };
+
+    static const ZoneLordTeleport s_Teleports[] = {
+        { "Затон: Скадовск (Главная палуба)", "Затон", 115.0f, -7.0f, 180.0f },
+        { "Затон: Шевченко", "Затон", 170.0f, -4.0f, 50.0f },
+        { "Затон: Станция переработки отходов", "Затон", 320.0f, 15.0f, -270.0f },
+        { "Затон: Лесопилка", "Затон", -355.0f, 21.0f, 195.0f },
+        { "Затон: Железный лес", "Затон", 95.0f, 12.0f, -330.0f },
+        { "Затон: Сгоревший хутор", "Затон", -270.0f, 18.0f, -50.0f },
+        { "Затон: ВНЗ Круг (Антенны)", "Затон", -130.0f, 25.0f, 50.0f },
+        { "Затон: Портовые краны", "Затон", 70.0f, 1.0f, 280.0f },
+        { "Юпитер: Станция Янов (Зал ожидания)", "Окрестности Юпитера", -50.0f, 3.5f, 190.0f },
+        { "Юпитер: Бункер ученых", "Окрестности Юпитера", -180.0f, -3.0f, -150.0f },
+        { "Юпитер: Завод 'Юпитер' (Главный вход)", "Окрестности Юпитера", 200.0f, 5.0f, -200.0f },
+        { "Юпитер: Цементный завод", "Окрестности Юпитера", 180.0f, 12.0f, 300.0f },
+        { "Юпитер: КПП / Градирня", "Окрестности Юпитера", 240.0f, 15.0f, 40.0f },
+        { "Юпитер: Карьер", "Окрестности Юпитера", -20.0f, -20.0f, -80.0f },
+        { "Юпитер: Вентиляционный комплекс (Оазис)", "Окрестности Юпитера", -80.0f, -10.0f, -360.0f },
+        { "Путепровод Припять-1: Входной тоннель", "Путепровод Припять-1", 0.0f, -30.0f, 0.0f },
+        { "Припять: Прачечная (Штаб военных)", "Припять", 160.0f, -0.5f, 10.0f },
+        { "Припять: Речной порт", "Припять", 280.0f, -12.0f, -180.0f },
+        { "Припять: Универмаг", "Припять", 40.0f, 1.0f, 160.0f },
+        { "Припять: КБО 'Юбилейный' (Вход в X-8)", "Припять", -160.0f, 2.0f, 40.0f },
+        { "Припять: Кинотеатр 'Прометей'", "Припять", -240.0f, 0.0f, -150.0f },
+        { "Припять: Госпиталь", "Припять", -120.0f, 0.0f, 240.0f },
+        { "Припять: Школа", "Припять", 70.0f, 2.0f, -70.0f },
+        { "Припять: Детский сад", "Припять", 130.0f, 1.0f, -140.0f },
+        { "Лаборатория X-8: Центральный зал", "Лаборатория X-8", -50.0f, -25.0f, 15.0f },
+    };
+#else
     static const ZoneLordItem s_Weapons[] = {
         { "ПМ (Пистолет Макарова)", "wpn_pm", "Пистолеты" },
         { "ПБ (Бесшумный)", "wpn_pb", "Пистолеты" },
@@ -795,6 +1077,7 @@ namespace UI
         { "Площадь / Гостиница 'Полесье'", "Припять", 15.0f, 0.5f, 260.0f },
         { "Саркофаг ЧАЭС", "ЧАЭС", 25.0f, 0.0f, 60.0f },
     };
+#endif
 
     void Menu::RenderZoneLordTab()
     {
@@ -1202,7 +1485,11 @@ namespace UI
         ImGui::SameLine();
 
         // Right Card: Engine Diagnostics
+#if defined(XRAY_COP)
+        BeginCard("Card_World_Diagnostics", "X-Ray Engine 1.6 Diagnostics", ImVec2(colW, 0));
+#else
         BeginCard("Card_World_Diagnostics", "X-Ray Engine 1.0006 Diagnostics", ImVec2(colW, 0));
+#endif
         {
             XRay::CRenderDevice* pDev = XRay::Engine::GetDevice();
             ImGui::Text("Render Device: %s (0x%p)", pDev ? "Connected" : "Not Found", pDev);
@@ -1343,7 +1630,11 @@ namespace UI
             ImGui::Separator();
             ImGui::Spacing();
 
+#if defined(XRAY_COP)
+            if (ImGui::Button("Eject DLL From xrEngine.exe", ImVec2(-1.0f, 32)))
+#else
             if (ImGui::Button("Eject DLL From XR_3DA.exe", ImVec2(-1.0f, 32)))
+#endif
             {
                 Core::Logger::Warning("Eject requested via menu button!");
                 Core::g_bUnloadRequested.store(true);
@@ -1375,6 +1666,20 @@ namespace UI
         float s = g_Config.settings.fUiScale;
         ImGui::SetNextWindowSize(ImVec2(800.0f * s, 560.0f * s), ImGuiCond_FirstUseEver);
 
+#if defined(XRAY_COP)
+        if (ImGui::Begin("S.T.A.L.K.E.R. - Internal COP v1.6.02 [X-Ray 1.6]", &g_Config.bShowMenu,
+                         ImGuiWindowFlags_NoCollapse))
+        {
+            // Animated Medusa Artifact Icon Banner
+            ImVec2 headerStart = ImGui::GetCursorScreenPos();
+            DrawMedusaArtifactIcon(ImGui::GetWindowDrawList(), ImVec2(headerStart.x + 14.0f * s, headerStart.y + 11.0f * s), 9.0f * s);
+
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 30.0f * s);
+            ImGui::TextColored(ImVec4(0.95f, 0.70f, 0.20f, 1.0f), "PROJECT MEDUSA");
+            ImGui::SameLine();
+            ImGui::TextDisabled("| S.T.A.L.K.E.R. Call of Pripyat v1.6.02");
+            ImGui::Spacing();
+#else
         if (ImGui::Begin("S.T.A.L.K.E.R. - Internal SOC v1.0006 [X-Ray 1.0]", &g_Config.bShowMenu,
                          ImGuiWindowFlags_NoCollapse))
         {
@@ -1387,6 +1692,7 @@ namespace UI
             ImGui::SameLine();
             ImGui::TextDisabled("| S.T.A.L.K.E.R. Internal SOC v1.0006");
             ImGui::Spacing();
+#endif
 
             // Horizontal Navigation Bar
             const char* tabNames[] = {

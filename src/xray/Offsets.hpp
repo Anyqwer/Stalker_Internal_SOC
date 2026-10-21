@@ -7,24 +7,84 @@
 
 namespace XRay
 {
+#if defined(XRAY_COP)
+    static constexpr uintptr_t OFF_LVL_ACTOR        = 0x20;
+    static constexpr uintptr_t OFF_LVL_OBJLIST      = 0x4C;
+    static constexpr uintptr_t OFF_LVL_OBJECTSPACE  = 0x40094;
+    static constexpr uintptr_t OFF_OBJLIST_ACTIVE   = 0x40008;
+    static constexpr uintptr_t OFF_OBJLIST_SLEEP    = 0x40014;
+
+    static constexpr uintptr_t OFF_ACTOR_COND       = 0x26C;
+    static constexpr uintptr_t OFF_ACTOR_INV        = 0x278;
+
+    static constexpr uintptr_t OFF_COND_HP          = 0x04;
+    static constexpr uintptr_t OFF_COND_HPMAX       = 0x08;
+    static constexpr uintptr_t OFF_COND_POWER       = 0x54;
+    static constexpr uintptr_t OFF_COND_RAD         = 0x58;
+    static constexpr uintptr_t OFF_COND_PSY         = 0x5C;
+    static constexpr uintptr_t OFF_COND_BLEED       = 0x60;
+    static constexpr uintptr_t OFF_COND_MAXWALK     = 0x1B4;
+    static constexpr uintptr_t OFF_COND_MAXWT       = 0x1B8;
+
+    static constexpr uintptr_t OFF_ACTOR_WALKACCEL  = 0x59C;
+    static constexpr uintptr_t OFF_ACTOR_JUMPSPEED  = 0x5A0;
+    static constexpr uintptr_t OFF_ACTOR_RUNFACTOR  = 0x5A4;
+    static constexpr uintptr_t OFF_ACTOR_SPRINT     = 0x5B8;
+
+    static constexpr uintptr_t OFF_ACTOR_CURCAM     = 0x524;
+    static constexpr uintptr_t OFF_ACTOR_CAMERAS    = 0x514;
+
+    static constexpr uintptr_t OFF_INV_ACTIVEITEM   = 0x4C;
+    static constexpr uintptr_t OFF_WEAPON_MAGSIZE   = 0x694;
+    static constexpr uintptr_t OFF_WEAPON_ELAPSED   = 0x690;
+#else // SoC (X-Ray 1.0006)
+    static constexpr uintptr_t OFF_LVL_ACTOR        = 0x20;
+    static constexpr uintptr_t OFF_LVL_OBJLIST      = 0x54;
+    static constexpr uintptr_t OFF_LVL_OBJECTSPACE  = 0xCC;
+    static constexpr uintptr_t OFF_OBJLIST_ACTIVE   = 0x1C;
+    static constexpr uintptr_t OFF_OBJLIST_SLEEP    = 0x2C;
+
+    static constexpr uintptr_t OFF_ACTOR_COND       = 0x220;
+    static constexpr uintptr_t OFF_ACTOR_INV        = 0x298;
+
+    static constexpr uintptr_t OFF_COND_HP          = 0x04;
+    static constexpr uintptr_t OFF_COND_HPMAX       = 0x08;
+    static constexpr uintptr_t OFF_COND_POWER       = 0x58;
+    static constexpr uintptr_t OFF_COND_RAD         = 0x5C;
+    static constexpr uintptr_t OFF_COND_PSY         = 0x60;
+    static constexpr uintptr_t OFF_COND_BLEED       = 0x80;
+    static constexpr uintptr_t OFF_COND_MAXWALK     = 0x138;
+    static constexpr uintptr_t OFF_COND_MAXWT       = 0x13C;
+
+    static constexpr uintptr_t OFF_ACTOR_WALKACCEL  = 0x5A0;
+    static constexpr uintptr_t OFF_ACTOR_JUMPSPEED  = 0x5A4;
+    static constexpr uintptr_t OFF_ACTOR_RUNFACTOR  = 0x5A8;
+    static constexpr uintptr_t OFF_ACTOR_SPRINT     = 0x5BC;
+
+    static constexpr uintptr_t OFF_ACTOR_CURCAM     = 0x530;
+    static constexpr uintptr_t OFF_ACTOR_CAMERAS    = 0x524;
+
+    static constexpr uintptr_t OFF_INV_ACTIVEITEM   = 0x4C;
+    static constexpr uintptr_t OFF_WEAPON_MAGSIZE   = 0x580;
+    static constexpr uintptr_t OFF_WEAPON_ELAPSED   = 0x57C;
+#endif
+
     class Engine
     {
     public:
         static bool Initialize()
         {
-            HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
-            if (!h3DA)
-            {
-                h3DA = GetModuleHandleA(nullptr);
-            }
+            HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+            if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+            if (!hEngine) hEngine = GetModuleHandleA(nullptr);
 
-            if (h3DA)
+            if (hEngine)
             {
-                s_pDevice = reinterpret_cast<CRenderDevice*>(GetProcAddress(h3DA, "?Device@@3VCRenderDevice@@A"));
-                s_ppGameLevel = reinterpret_cast<CLevel**>(GetProcAddress(h3DA, "?g_pGameLevel@@3PAVIGame_Level@@A"));
+                s_pDevice = reinterpret_cast<CRenderDevice*>(GetProcAddress(hEngine, "?Device@@3VCRenderDevice@@A"));
+                s_ppGameLevel = reinterpret_cast<CLevel**>(GetProcAddress(hEngine, "?g_pGameLevel@@3PAVIGame_Level@@A"));
 
-                s_fnObjList_o_count = reinterpret_cast<tCObjectList_o_count>(GetProcAddress(h3DA, "?o_count@CObjectList@@QAEIXZ"));
-                s_fnObjList_o_get_by_iterator = reinterpret_cast<tCObjectList_o_get_by_iterator>(GetProcAddress(h3DA, "?o_get_by_iterator@CObjectList@@QAEPAVCObject@@I@Z"));
+                s_fnObjList_o_count = reinterpret_cast<tCObjectList_o_count>(GetProcAddress(hEngine, "?o_count@CObjectList@@QAEIXZ"));
+                s_fnObjList_o_get_by_iterator = reinterpret_cast<tCObjectList_o_get_by_iterator>(GetProcAddress(hEngine, "?o_get_by_iterator@CObjectList@@QAEPAVCObject@@I@Z"));
 
                 if (s_pDevice)
                 {
@@ -47,9 +107,10 @@ namespace XRay
         {
             if (!s_pDevice)
             {
-                HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
-                if (h3DA)
-                    s_pDevice = reinterpret_cast<CRenderDevice*>(GetProcAddress(h3DA, "?Device@@3VCRenderDevice@@A"));
+                HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+                if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+                if (hEngine)
+                    s_pDevice = reinterpret_cast<CRenderDevice*>(GetProcAddress(hEngine, "?Device@@3VCRenderDevice@@A"));
             }
             return s_pDevice;
         }
@@ -58,9 +119,10 @@ namespace XRay
         {
             if (!s_ppGameLevel)
             {
-                HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
-                if (h3DA)
-                    s_ppGameLevel = reinterpret_cast<CLevel**>(GetProcAddress(h3DA, "?g_pGameLevel@@3PAVIGame_Level@@A"));
+                HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+                if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+                if (hEngine)
+                    s_ppGameLevel = reinterpret_cast<CLevel**>(GetProcAddress(hEngine, "?g_pGameLevel@@3PAVIGame_Level@@A"));
             }
 
             if (s_ppGameLevel)
@@ -85,10 +147,10 @@ namespace XRay
                 if (!pLevel || IsBadReadPtr(pLevel, sizeof(void*))) return false;
 
                 uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
-                if (IsBadReadPtr(reinterpret_cast<void*>(lvlAddr + 0x54), 0x40)) return false;
+                if (IsBadReadPtr(reinterpret_cast<void*>(lvlAddr + OFF_LVL_OBJLIST), 0x40)) return false;
 
                 CObject* pActor = nullptr;
-                if (!Core::Memory::SafeRead(lvlAddr + 0x20, pActor)) return false;
+                if (!Core::Memory::SafeRead(lvlAddr + OFF_LVL_ACTOR, pActor)) return false;
                 if (!pActor || IsBadReadPtr(pActor, 0x600)) return false;
 
                 uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
@@ -102,11 +164,11 @@ namespace XRay
                     return false;
 
                 uintptr_t pConditions = 0;
-                if (!Core::Memory::SafeRead(actorAddr + 0x220, pConditions)) return false;
-                if (!pConditions || IsBadReadPtr(reinterpret_cast<void*>(pConditions), 0x150)) return false;
+                if (!Core::Memory::SafeRead(actorAddr + OFF_ACTOR_COND, pConditions)) return false;
+                if (!pConditions || IsBadReadPtr(reinterpret_cast<void*>(pConditions), 0x100)) return false;
 
                 float hp = 0.0f;
-                if (!Core::Memory::SafeRead(pConditions + 0x04, hp)) return false;
+                if (!Core::Memory::SafeRead(pConditions + OFF_COND_HP, hp)) return false;
                 if (hp <= 0.0f || hp > 1000.0f || std::isnan(hp)) return false;
 
                 return true;
@@ -156,20 +218,25 @@ namespace XRay
 
                 // Check human characters
                 bool isHuman = (strstr(visualLower, "actor") || strstr(visualLower, "stalker") || strstr(visualLower, "hero") ||
+                                strstr(visualLower, "human") || strstr(visualLower, "characters") ||
                                 strstr(sectLower, "stalker") || strstr(sectLower, "bandit") || strstr(sectLower, "soldier") ||
                                 strstr(sectLower, "military") || strstr(sectLower, "monolith") || strstr(sectLower, "merc") ||
-                                strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(sectLower, "freedom") ||
-                                strstr(sectLower, "zombied") || strstr(sectLower, "novice") || strstr(sectLower, "veteran") ||
+                                strstr(sectLower, "killer") || strstr(sectLower, "dolg") || strstr(sectLower, "duty") ||
+                                strstr(sectLower, "freedom") || strstr(sectLower, "zombied") || strstr(sectLower, "novice") ||
+                                strstr(sectLower, "veteran") ||
+                                strncmp(sectLower, "sim_default_", 12) == 0 ||
                                 strncmp(sectLower, "esc_", 4) == 0 || strncmp(sectLower, "gar_", 4) == 0 ||
                                 strncmp(sectLower, "agr_", 4) == 0 || strncmp(sectLower, "val_", 4) == 0 ||
-                                strncmp(sectLower, "bar_", 4) == 0 || strncmp(sectLower, "mil_", 4) == 0);
+                                strncmp(sectLower, "bar_", 4) == 0 || strncmp(sectLower, "mil_", 4) == 0 ||
+                                strncmp(sectLower, "zat_", 4) == 0 || strncmp(sectLower, "jup_", 4) == 0 ||
+                                strncmp(sectLower, "pri_", 4) == 0 || strncmp(sectLower, "pas_", 4) == 0);
 
                 if (isHuman)
                 {
-                    // Enemies (Hostile by default in SoC)
+                    // Enemies (Hostiles)
                     if (strstr(sectLower, "bandit") || strstr(visualLower, "bandit") || strstr(nameLower, "bandit") ||
-                        strstr(sectLower, "monolith") || strstr(visualLower, "monolith") || strstr(nameLower, "monolith") ||
-                        strstr(sectLower, "merc") || strstr(sectLower, "killer") || strstr(visualLower, "merc") ||
+                        strstr(sectLower, "monolith") || strstr(sectLower, "monolit") || strstr(visualLower, "monolith") || strstr(visualLower, "monolit") || strstr(nameLower, "monolith") || strstr(nameLower, "monolit") ||
+                        strstr(sectLower, "merc") || strstr(sectLower, "killer") || strstr(visualLower, "merc") || strstr(visualLower, "killer") || strstr(nameLower, "killer") ||
                         strstr(sectLower, "military") || strstr(sectLower, "soldier") || strstr(visualLower, "soldier") || strstr(sectLower, "voen") ||
                         strstr(sectLower, "zombied") || strstr(visualLower, "zombied"))
                     {
@@ -178,13 +245,13 @@ namespace XRay
 
                     // Neutrals (Duty & Freedom, Ecologists)
                     if (strstr(sectLower, "freedom") || strstr(sectLower, "svoboda") || strstr(visualLower, "freedom") ||
-                        strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(visualLower, "dolg") ||
+                        strstr(sectLower, "dolg") || strstr(sectLower, "duty") || strstr(visualLower, "dolg") || strstr(visualLower, "duty") ||
                         strstr(sectLower, "ecolog") || strstr(visualLower, "ecolog"))
                     {
                         return EntityRelation::Neutral;
                     }
 
-                    // Friends / Allies (Loners, neutral stalkers, traders, bar regulars)
+                    // Friends / Allies (Loners, neutral stalkers, traders)
                     return EntityRelation::Friend;
                 }
 
@@ -203,12 +270,29 @@ namespace XRay
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
             CObject* pActor = nullptr;
-            if (Core::Memory::SafeRead(lvlAddr + 0x20, pActor))
+            if (Core::Memory::SafeRead(lvlAddr + OFF_LVL_ACTOR, pActor))
             {
                 if (pActor && !IsBadReadPtr(pActor, 0x100))
                     return pActor;
             }
             return nullptr;
+        }
+
+        static void EnsureObjListMethods()
+        {
+            if (!s_fnObjList_o_count || !s_fnObjList_o_get_by_iterator)
+            {
+                HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+                if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+                if (!hEngine) hEngine = GetModuleHandleA(nullptr);
+                if (hEngine)
+                {
+                    if (!s_fnObjList_o_count)
+                        s_fnObjList_o_count = reinterpret_cast<tCObjectList_o_count>(GetProcAddress(hEngine, "?o_count@CObjectList@@QAEIXZ"));
+                    if (!s_fnObjList_o_get_by_iterator)
+                        s_fnObjList_o_get_by_iterator = reinterpret_cast<tCObjectList_o_get_by_iterator>(GetProcAddress(hEngine, "?o_get_by_iterator@CObjectList@@QAEPAVCObject@@I@Z"));
+                }
+            }
         }
 
         static xr_vector<CObject*>* GetActiveObjects()
@@ -217,12 +301,11 @@ namespace XRay
             if (!pLevel || IsBadReadPtr(pLevel, sizeof(void*))) return nullptr;
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
-            uintptr_t objList = lvlAddr + 0x54;
-            if (IsBadReadPtr(reinterpret_cast<void*>(objList), 0x40)) return nullptr;
+            uintptr_t objList = lvlAddr + OFF_LVL_OBJLIST;
+            uintptr_t vecAddr = objList + OFF_OBJLIST_ACTIVE;
+            if (IsBadReadPtr(reinterpret_cast<void*>(vecAddr), sizeof(xr_vector<CObject*>))) return nullptr;
 
-            xr_vector<CObject*>* pVec = reinterpret_cast<xr_vector<CObject*>*>(objList + 0x1C);
-            if (IsBadReadPtr(pVec, sizeof(xr_vector<CObject*>))) return nullptr;
-
+            xr_vector<CObject*>* pVec = reinterpret_cast<xr_vector<CObject*>*>(vecAddr);
             return pVec;
         }
 
@@ -232,12 +315,11 @@ namespace XRay
             if (!pLevel || IsBadReadPtr(pLevel, sizeof(void*))) return nullptr;
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
-            uintptr_t objList = lvlAddr + 0x54;
-            if (IsBadReadPtr(reinterpret_cast<void*>(objList), 0x40)) return nullptr;
+            uintptr_t objList = lvlAddr + OFF_LVL_OBJLIST;
+            uintptr_t vecAddr = objList + OFF_OBJLIST_SLEEP;
+            if (IsBadReadPtr(reinterpret_cast<void*>(vecAddr), sizeof(xr_vector<CObject*>))) return nullptr;
 
-            xr_vector<CObject*>* pVec = reinterpret_cast<xr_vector<CObject*>*>(objList + 0x2C);
-            if (IsBadReadPtr(pVec, sizeof(xr_vector<CObject*>))) return nullptr;
-
+            xr_vector<CObject*>* pVec = reinterpret_cast<xr_vector<CObject*>*>(vecAddr);
             return pVec;
         }
 
@@ -247,13 +329,16 @@ namespace XRay
             if (!pLevel) return 0;
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
-            void* objList = reinterpret_cast<void*>(lvlAddr + 0x54);
+            void* objList = reinterpret_cast<void*>(lvlAddr + OFF_LVL_OBJLIST);
+
+            EnsureObjListMethods();
 
             if (s_fnObjList_o_count)
             {
                 __try
                 {
-                    return s_fnObjList_o_count(objList);
+                    uint32_t count = s_fnObjList_o_count(objList);
+                    if (count < 20000) return count;
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER)
                 {
@@ -274,13 +359,16 @@ namespace XRay
             if (!pLevel) return nullptr;
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
-            void* objList = reinterpret_cast<void*>(lvlAddr + 0x54);
+            void* objList = reinterpret_cast<void*>(lvlAddr + OFF_LVL_OBJLIST);
+
+            EnsureObjListMethods();
 
             if (s_fnObjList_o_get_by_iterator)
             {
                 __try
                 {
-                    return s_fnObjList_o_get_by_iterator(objList, index);
+                    CObject* pObj = s_fnObjList_o_get_by_iterator(objList, index);
+                    if (pObj && !IsBadReadPtr(pObj, 0x100)) return pObj;
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER)
                 {
@@ -308,82 +396,43 @@ namespace XRay
         static Fmatrix GetViewMatrix()
         {
             CRenderDevice* pDev = GetDevice();
-            if (!pDev) return Fmatrix();
-
-            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
-            Fmatrix view;
-            if (Core::Memory::SafeRead(devAddr + 0x23C, view))
-                return view;
-
-            return Fmatrix();
+            if (!pDev || IsBadReadPtr(pDev, sizeof(CRenderDevice))) return Fmatrix();
+            return pDev->mView;
         }
 
         static Fmatrix GetProjectMatrix()
         {
             CRenderDevice* pDev = GetDevice();
-            if (!pDev) return Fmatrix();
-
-            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
-            Fmatrix proj;
-            if (Core::Memory::SafeRead(devAddr + 0x27C, proj))
-                return proj;
-
-            return Fmatrix();
+            if (!pDev || IsBadReadPtr(pDev, sizeof(CRenderDevice))) return Fmatrix();
+            return pDev->mProject;
         }
 
         static Fmatrix GetFullTransform()
         {
             CRenderDevice* pDev = GetDevice();
-            if (!pDev) return Fmatrix();
-
-            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
-            Fmatrix full;
-            // In X-Ray 1.0006: CRenderDevice has precalculated mFullTransform at offset 0x2BC
-            if (Core::Memory::SafeRead(devAddr + 0x2BC, full))
-                return full;
-
-            Fmatrix v = GetViewMatrix();
-            Fmatrix p = GetProjectMatrix();
-            return v * p;
+            if (!pDev || IsBadReadPtr(pDev, sizeof(CRenderDevice))) return Fmatrix();
+            return pDev->mFullTransform;
         }
 
         static Fvector GetCameraPosition()
         {
             CRenderDevice* pDev = GetDevice();
-            if (!pDev) return Fvector(0, 0, 0);
-
-            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
-            Fvector camPos;
-            if (Core::Memory::SafeRead(devAddr + 0x20C, camPos))
-                return camPos;
-
-            return Fvector(0, 0, 0);
+            if (!pDev || IsBadReadPtr(pDev, sizeof(CRenderDevice))) return Fvector(0, 0, 0);
+            return pDev->vCameraPosition;
         }
 
         static Fvector GetCameraDirection()
         {
             CRenderDevice* pDev = GetDevice();
-            if (!pDev) return Fvector(0, 0, 1);
-
-            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
-            Fvector camDir;
-            if (Core::Memory::SafeRead(devAddr + 0x218, camDir))
-                return camDir;
-
-            return Fvector(0, 0, 1);
+            if (!pDev || IsBadReadPtr(pDev, sizeof(CRenderDevice))) return Fvector(0, 0, 1);
+            return pDev->vCameraDirection;
         }
 
         static Fvector GetCameraRight()
         {
             CRenderDevice* pDev = GetDevice();
-            if (!pDev) return Fvector(1, 0, 0);
-
-            uintptr_t devAddr = reinterpret_cast<uintptr_t>(pDev);
-            Fvector camRight;
-            if (Core::Memory::SafeRead(devAddr + 0x230, camRight))
-                return camRight;
-
-            return Fvector(1, 0, 0);
+            if (!pDev || IsBadReadPtr(pDev, sizeof(CRenderDevice))) return Fvector(1, 0, 0);
+            return pDev->vCameraRight;
         }
 
         static bool TeleportActor(const Fvector& newPos)
@@ -426,20 +475,30 @@ namespace XRay
             if (!pLevel) return true;
 
             uintptr_t lvlAddr = reinterpret_cast<uintptr_t>(pLevel);
-            void* pObjectSpace = reinterpret_cast<void*>(lvlAddr + 0xCC);
+            void* pObjectSpace = reinterpret_cast<void*>(lvlAddr + OFF_LVL_OBJECTSPACE);
             if (!pObjectSpace || IsBadReadPtr(pObjectSpace, sizeof(void*)))
                 return true;
 
             if (!s_fnRayTest)
             {
-                HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
-                if (h3DA)
+                HMODULE hCDB = GetModuleHandleA("xrCDB.dll");
+                if (hCDB)
                 {
-                    s_fnRayTest = reinterpret_cast<tRayTest>(GetProcAddress(h3DA,
+                    s_fnRayTest = reinterpret_cast<tRayTest>(GetProcAddress(hCDB,
                         "?RayTest@CObjectSpace@@QAEHABU?$_vector3@M@@0MW4rq_target@collide@@PAUray_cache@4@PAVCObject@@@Z"));
-                    if (!s_fnRayTest)
+                }
+                if (!s_fnRayTest)
+                {
+                    HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+                    if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+                    if (hEngine)
                     {
-                        s_fnRayTest = reinterpret_cast<tRayTest>(reinterpret_cast<uintptr_t>(h3DA) + 0x4E300);
+                        s_fnRayTest = reinterpret_cast<tRayTest>(GetProcAddress(hEngine,
+                            "?RayTest@CObjectSpace@@QAEHABU?$_vector3@M@@0MW4rq_target@collide@@PAUray_cache@4@PAVCObject@@@Z"));
+#if !defined(XRAY_COP)
+                        if (!s_fnRayTest)
+                            s_fnRayTest = reinterpret_cast<tRayTest>(reinterpret_cast<uintptr_t>(hEngine) + 0x4E300);
+#endif
                     }
                 }
             }
@@ -485,93 +544,113 @@ namespace XRay
                 if (!vtbl || IsBadReadPtr(vtbl, sizeof(void*) * 8))
                     return false;
 
+#if defined(XRAY_COP)
+                typedef void* (__stdcall* t_dcast_PKinematics)(void* thisPtr);
+                auto dcast = reinterpret_cast<t_dcast_PKinematics>(vtbl[3]);
+#else
                 typedef void* (__thiscall* t_dcast_PKinematics)(void* thisPtr);
                 auto dcast = reinterpret_cast<t_dcast_PKinematics>(vtbl[6]);
+#endif
                 void* pKinematics = dcast(reinterpret_cast<void*>(visual));
-                if (!pKinematics || IsBadReadPtr(pKinematics, 0xA0))
+                if (!pKinematics || IsBadReadPtr(pKinematics, 0x40))
                     return false;
 
-                uintptr_t kAddr = reinterpret_cast<uintptr_t>(pKinematics);
-                uintptr_t boneInstances = *reinterpret_cast<uintptr_t*>(kAddr + 0x84);
-                if (!boneInstances || IsBadReadPtr(reinterpret_cast<void*>(boneInstances), sizeof(CBoneInstance)))
+                auto k = reinterpret_cast<CKinematics*>(pKinematics);
+                CBoneInstance* boneInstances = k->bone_instances;
+                if (!boneInstances || IsBadReadPtr(boneInstances, sizeof(CBoneInstance)))
                     return false;
 
-                if (!s_fnLL_BoneID)
+                const char* targetName = "bip01_head";
+                if (boneTargetType == 1) targetName = "bip01_neck";
+                else if (boneTargetType == 2) targetName = "bip01_spine2";
+                else if (boneTargetType == 3) targetName = "bip01_pelvis";
+
+                uint16_t boneId = 0xFFFF;
+                size_t count = k->GetBoneCount();
+
+                // 1. Direct name match in bone_datas
+                if (count > 0 && count <= 128)
                 {
-                    HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
-                    if (h3DA)
+                    for (size_t i = 0; i < count; ++i)
                     {
-                        s_fnLL_BoneID = reinterpret_cast<tLL_BoneID>(GetProcAddress(h3DA,
-                            "?LL_BoneID@CKinematics@@QAEGPBD@Z"));
-                        if (!s_fnLL_BoneID)
+                        CBoneData* pData = k->GetBoneData(i);
+                        if (!pData || IsBadReadPtr(pData, sizeof(CBoneData))) continue;
+#if defined(XRAY_COP)
+                        const char* bName = SafeReadSharedStr(reinterpret_cast<uintptr_t>(&pData->name));
+#else
+                        const char* bName = SafeReadSharedStr(reinterpret_cast<uintptr_t>(pData) + 0x08);
+#endif
+                        if (bName && _stricmp(bName, targetName) == 0)
                         {
-                            s_fnLL_BoneID = reinterpret_cast<tLL_BoneID>(reinterpret_cast<uintptr_t>(h3DA) + 0x6C6E0);
+                            boneId = static_cast<uint16_t>(i);
+                            break;
                         }
                     }
                 }
 
-                uint16_t boneId = 0xFFFF;
-                if (s_fnLL_BoneID)
+                // 2. Engine LL_BoneID lookup
+                if (boneId == 0xFFFF)
                 {
-                    const char* boneName = "bip01_head";
-                    if (boneTargetType == 1) boneName = "bip01_neck";
-                    else if (boneTargetType == 2) boneName = "bip01_spine2";
-                    else if (boneTargetType == 3) boneName = "bip01_pelvis";
-
-                    boneId = s_fnLL_BoneID(pKinematics, boneName);
-
-                    // Fallbacks for mutants / non-standard rigs
-                    if (boneId == 0xFFFF)
+                    if (!s_fnLL_BoneID)
                     {
-                        if (boneTargetType <= 1) boneId = s_fnLL_BoneID(pKinematics, "head");
-                        if (boneId == 0xFFFF) boneId = s_fnLL_BoneID(pKinematics, "bip01_spine1");
-                        if (boneId == 0xFFFF) boneId = s_fnLL_BoneID(pKinematics, "bip01_spine");
+                        HMODULE hEngine = GetModuleHandleA("XR_3DA.exe");
+                        if (!hEngine) hEngine = GetModuleHandleA("xrEngine.exe");
+                        if (hEngine)
+                        {
+                            s_fnLL_BoneID = reinterpret_cast<tLL_BoneID>(GetProcAddress(hEngine,
+                                "?LL_BoneID@CKinematics@@QAEGPBD@Z"));
+#if !defined(XRAY_COP)
+                            if (!s_fnLL_BoneID)
+                                s_fnLL_BoneID = reinterpret_cast<tLL_BoneID>(reinterpret_cast<uintptr_t>(hEngine) + 0x6C6E0);
+#endif
+                        }
+                    }
+
+                    if (s_fnLL_BoneID)
+                    {
+                        boneId = s_fnLL_BoneID(pKinematics, targetName);
+                        if (boneId == 0xFFFF)
+                        {
+                            if (boneTargetType <= 1) boneId = s_fnLL_BoneID(pKinematics, "head");
+                            if (boneId == 0xFFFF) boneId = s_fnLL_BoneID(pKinematics, "bip01_spine1");
+                            if (boneId == 0xFFFF) boneId = s_fnLL_BoneID(pKinematics, "bip01_spine");
+                        }
                     }
                 }
 
                 if (boneId != 0xFFFF && boneId < 128)
                 {
-                    float lx = *reinterpret_cast<float*>(boneInstances + boneId * 0xA0 + 0x30);
-                    float ly = *reinterpret_cast<float*>(boneInstances + boneId * 0xA0 + 0x34);
-                    float lz = *reinterpret_cast<float*>(boneInstances + boneId * 0xA0 + 0x38);
+                    float lx = boneInstances[boneId].mTransform._41;
+                    float ly = boneInstances[boneId].mTransform._42;
+                    float lz = boneInstances[boneId].mTransform._43;
 
                     Fvector localBone(lx, ly, lz);
                     pObj->render_transform.Transform(outWorldPos, localBone);
                     return true;
                 }
 
-                // If bone ID lookup failed, find the highest bone in local Y (head)
-                uintptr_t pBoneDataVec = *reinterpret_cast<uintptr_t*>(kAddr + 0x88);
-                if (pBoneDataVec && !IsBadReadPtr(reinterpret_cast<void*>(pBoneDataVec), 0x10))
+                // 3. Fallback: find highest bone in local Y (head)
+                if (count > 0 && count <= 128)
                 {
-                    CBoneData** boneDataFirst = *reinterpret_cast<CBoneData***>(pBoneDataVec + 0x04);
-                    CBoneData** boneDataLast = *reinterpret_cast<CBoneData***>(pBoneDataVec + 0x08);
-                    if (boneDataFirst && boneDataLast && boneDataLast > boneDataFirst)
+                    size_t bestIdx = 0;
+                    float maxLy = -1e6f;
+                    for (size_t i = 0; i < count; ++i)
                     {
-                        size_t count = boneDataLast - boneDataFirst;
-                        if (count > 0 && count <= 128)
+                        float ly = boneInstances[i].mTransform._42;
+                        if (ly > maxLy)
                         {
-                            size_t bestIdx = 0;
-                            float maxLy = -1e6f;
-                            for (size_t i = 0; i < count; ++i)
-                            {
-                                float ly = *reinterpret_cast<float*>(boneInstances + i * 0xA0 + 0x34);
-                                if (ly > maxLy)
-                                {
-                                    maxLy = ly;
-                                    bestIdx = i;
-                                }
-                            }
-
-                            float lx = *reinterpret_cast<float*>(boneInstances + bestIdx * 0xA0 + 0x30);
-                            float ly = *reinterpret_cast<float*>(boneInstances + bestIdx * 0xA0 + 0x34);
-                            float lz = *reinterpret_cast<float*>(boneInstances + bestIdx * 0xA0 + 0x38);
-
-                            Fvector localBone(lx, ly, lz);
-                            pObj->render_transform.Transform(outWorldPos, localBone);
-                            return true;
+                            maxLy = ly;
+                            bestIdx = i;
                         }
                     }
+
+                    float lx = boneInstances[bestIdx].mTransform._41;
+                    float ly = boneInstances[bestIdx].mTransform._42;
+                    float lz = boneInstances[bestIdx].mTransform._43;
+
+                    Fvector localBone(lx, ly, lz);
+                    pObj->render_transform.Transform(outWorldPos, localBone);
+                    return true;
                 }
 
                 return false;
@@ -584,15 +663,18 @@ namespace XRay
 
         static uintptr_t GetEnvironment()
         {
-            HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
-            if (!h3DA) return 0;
+            HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+            if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+            if (!hEngine) return 0;
 
             static void** ppPersistent = nullptr;
             if (!ppPersistent)
             {
-                ppPersistent = reinterpret_cast<void**>(GetProcAddress(h3DA, "?g_pGamePersistent@@3PAVIGame_Persistent@@A"));
+                ppPersistent = reinterpret_cast<void**>(GetProcAddress(hEngine, "?g_pGamePersistent@@3PAVIGame_Persistent@@A"));
+#if !defined(XRAY_COP)
                 if (!ppPersistent)
-                    ppPersistent = reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(h3DA) + 0x10BB7C);
+                    ppPersistent = reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(hEngine) + 0x10BB7C);
+#endif
             }
 
             if (!ppPersistent || !*ppPersistent || IsBadReadPtr(*ppPersistent, sizeof(void*)))
@@ -603,7 +685,11 @@ namespace XRay
                 return 0;
 
             uintptr_t pEnv = *reinterpret_cast<uintptr_t*>(pPersistent + 0x46C);
-            if (!pEnv || IsBadReadPtr(reinterpret_cast<void*>(pEnv), 0x300))
+            if (!pEnv || IsBadReadPtr(reinterpret_cast<void*>(pEnv), 0x100))
+            {
+                pEnv = *reinterpret_cast<uintptr_t*>(pPersistent + 0x474);
+            }
+            if (!pEnv || IsBadReadPtr(reinterpret_cast<void*>(pEnv), 0x100))
                 return 0;
 
             return pEnv;
@@ -619,13 +705,16 @@ namespace XRay
 
             if (!s_fnSetGameTime)
             {
-                HMODULE h3DA = GetModuleHandleA("XR_3DA.exe");
-                if (h3DA)
+                HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+                if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+                if (hEngine)
                 {
-                    s_fnSetGameTime = reinterpret_cast<tSetGameTime>(GetProcAddress(h3DA,
+                    s_fnSetGameTime = reinterpret_cast<tSetGameTime>(GetProcAddress(hEngine,
                         "?SetGameTime@CEnvironment@@QAEXMM@Z"));
+#if !defined(XRAY_COP)
                     if (!s_fnSetGameTime)
-                        s_fnSetGameTime = reinterpret_cast<tSetGameTime>(reinterpret_cast<uintptr_t>(h3DA) + 0x38730);
+                        s_fnSetGameTime = reinterpret_cast<tSetGameTime>(reinterpret_cast<uintptr_t>(hEngine) + 0x38730);
+#endif
                 }
             }
 
@@ -668,16 +757,25 @@ namespace XRay
             if (!luaCode || !*luaCode) return false;
 
             HMODULE hXrGame = GetModuleHandleA("xrGame.dll");
-            HMODULE hXrLua = GetModuleHandleA("xrLua.dll");
+            HMODULE hXrLua = GetModuleHandleA("lua.JIT.1.1.4.dll");
+            if (!hXrLua) hXrLua = GetModuleHandleA("xrLua.dll");
             if (!hXrGame || !hXrLua) return false;
 
             __try
             {
                 uintptr_t baseGame = reinterpret_cast<uintptr_t>(hXrGame);
+#if defined(XRAY_COP)
+                uintptr_t ai_space = *reinterpret_cast<uintptr_t*>(baseGame + 0x64DA98);
+#else
                 uintptr_t ai_space = *reinterpret_cast<uintptr_t*>(baseGame + 0x5602B0);
+#endif
                 if (!ai_space || IsBadReadPtr(reinterpret_cast<void*>(ai_space), 0x30)) return false;
 
+#if defined(XRAY_COP)
+                uintptr_t script_engine = *reinterpret_cast<uintptr_t*>(ai_space + 0x1C);
+#else
                 uintptr_t script_engine = *reinterpret_cast<uintptr_t*>(ai_space + 0x20);
+#endif
                 if (!script_engine || IsBadReadPtr(reinterpret_cast<void*>(script_engine), 0x10)) return false;
 
                 void* L = *reinterpret_cast<void**>(script_engine + 0x04);

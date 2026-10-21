@@ -107,10 +107,10 @@ namespace Features
 
             // Check health: ignore dead bodies
             uintptr_t pConditions = 0;
-            if (Core::Memory::SafeRead(objAddr + 0x220, pConditions) && pConditions && !IsBadReadPtr(reinterpret_cast<void*>(pConditions), 0x20))
+            if (Core::Memory::SafeRead(objAddr + XRay::OFF_ACTOR_COND, pConditions) && pConditions && !IsBadReadPtr(reinterpret_cast<void*>(pConditions), 0x20))
             {
                 float hp = 1.0f;
-                if (Core::Memory::SafeRead(pConditions + 0x04, hp))
+                if (Core::Memory::SafeRead(pConditions + XRay::OFF_COND_HP, hp))
                 {
                     if (hp <= 0.0f) return;
                 }
@@ -204,24 +204,34 @@ namespace Features
 
         __try
         {
-            XRay::xr_vector<XRay::CObject*>* pActiveObjs = XRay::Engine::GetActiveObjects();
-            size_t activeCount = pActiveObjs ? pActiveObjs->size() : 0;
-
-            if (activeCount > 0 && activeCount < 20000)
+            uint32_t totalCount = XRay::Engine::GetTotalObjectCount();
+            if (totalCount > 0 && totalCount < 20000)
             {
-                for (size_t i = 0; i < activeCount; ++i)
+                for (uint32_t i = 0; i < totalCount; ++i)
                 {
-                    CheckCandidate(pActiveObjs->at(i));
+                    CheckCandidate(XRay::Engine::GetObjectByIndex(i));
                 }
             }
             else
             {
-                uint32_t totalCount = XRay::Engine::GetTotalObjectCount();
-                if (totalCount > 0 && totalCount < 20000)
+                // Fallback: direct vector iteration (active objects + sleeping objects)
+                XRay::xr_vector<XRay::CObject*>* pActiveObjs = XRay::Engine::GetActiveObjects();
+                if (pActiveObjs)
                 {
-                    for (uint32_t i = 0; i < totalCount; ++i)
+                    size_t activeCount = pActiveObjs->size();
+                    for (size_t i = 0; i < activeCount && i < 20000; ++i)
                     {
-                        CheckCandidate(XRay::Engine::GetObjectByIndex(i));
+                        CheckCandidate(pActiveObjs->at(i));
+                    }
+                }
+
+                XRay::xr_vector<XRay::CObject*>* pSleepingObjs = XRay::Engine::GetSleepingObjects();
+                if (pSleepingObjs)
+                {
+                    size_t sleepCount = pSleepingObjs->size();
+                    for (size_t i = 0; i < sleepCount && i < 20000; ++i)
+                    {
+                        CheckCandidate(pSleepingObjs->at(i));
                     }
                 }
             }
@@ -246,15 +256,15 @@ namespace Features
         if (!pActor || IsBadReadPtr(pActor, 0x600)) return;
 
         uintptr_t actorAddr = reinterpret_cast<uintptr_t>(pActor);
-        uint32_t curCamIdx = *reinterpret_cast<uint32_t*>(actorAddr + 0x530);
+        uint32_t curCamIdx = *reinterpret_cast<uint32_t*>(actorAddr + XRay::OFF_ACTOR_CURCAM);
         if (curCamIdx > 2) curCamIdx = 0;
 
-        uintptr_t pCam = *reinterpret_cast<uintptr_t*>(actorAddr + 0x524 + curCamIdx * 4);
+        uintptr_t pCam = *reinterpret_cast<uintptr_t*>(actorAddr + XRay::OFF_ACTOR_CAMERAS + curCamIdx * 4);
         if (!pCam || IsBadReadPtr(reinterpret_cast<void*>(pCam), 0x50))
             return;
 
         XRay::Fvector camPos = XRay::Engine::GetCameraPosition();
-        uintptr_t pFirstCam = *reinterpret_cast<uintptr_t*>(actorAddr + 0x524);
+        uintptr_t pFirstCam = *reinterpret_cast<uintptr_t*>(actorAddr + XRay::OFF_ACTOR_CAMERAS);
         XRay::Fvector aimSrc = camPos;
         if (pFirstCam && !IsBadReadPtr(reinterpret_cast<void*>(pFirstCam + 0x4C), sizeof(XRay::Fvector)))
         {

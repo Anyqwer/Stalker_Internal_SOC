@@ -17,8 +17,10 @@ DWORD WINAPI CheatMainThread(LPVOID lpParam)
 
     // 2. Wait for game modules to load completely
     Core::Logger::Info("Waiting for game engine modules to load...");
-    while (!GetModuleHandleA("XR_3DA.exe") ||
-           (!GetModuleHandleA("xrRender_R1.dll") && !GetModuleHandleA("xrRender_R2.dll") && !GetModuleHandleA("d3d9.dll")))
+    while ((!GetModuleHandleA("XR_3DA.exe") && !GetModuleHandleA("xrEngine.exe")) ||
+           (!GetModuleHandleA("xrRender_R1.dll") && !GetModuleHandleA("xrRender_R2.dll") &&
+            !GetModuleHandleA("xrRender_R3.dll") && !GetModuleHandleA("xrRender_R4.dll") &&
+            !GetModuleHandleA("d3d9.dll")))
     {
         Sleep(200);
     }
@@ -26,7 +28,9 @@ DWORD WINAPI CheatMainThread(LPVOID lpParam)
     Core::Logger::Success("Game modules detected! Setting up SDK & hooks...");
 
     // Store module bases
-    Core::g_xr3DABase = reinterpret_cast<uintptr_t>(GetModuleHandleA("XR_3DA.exe"));
+    HMODULE hEngine = GetModuleHandleA("xrEngine.exe");
+    if (!hEngine) hEngine = GetModuleHandleA("XR_3DA.exe");
+    Core::g_xr3DABase = reinterpret_cast<uintptr_t>(hEngine);
     Core::g_xrCoreBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("xrCore.dll"));
     Core::g_xrGameBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("xrGame.dll"));
 

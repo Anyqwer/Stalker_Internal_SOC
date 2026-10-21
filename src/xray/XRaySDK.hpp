@@ -73,10 +73,17 @@ namespace XRay
                 return "";
 
             uintptr_t pStrVal = *reinterpret_cast<uintptr_t*>(pSharedStr);
+#if defined(XRAY_COP)
+            if (!pStrVal || IsBadReadPtr(reinterpret_cast<void*>(pStrVal + 0x10), 1))
+                return "";
+
+            return reinterpret_cast<const char*>(pStrVal + 0x10);
+#else
             if (!pStrVal || IsBadReadPtr(reinterpret_cast<void*>(pStrVal + 0x0C), 1))
                 return "";
 
             return reinterpret_cast<const char*>(pStrVal + 0x0C);
+#endif
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
@@ -85,6 +92,89 @@ namespace XRay
     }
 
     // CRenderDevice: encapsulates viewport, projection, and camera matrices
+#if defined(XRAY_COP)
+    struct CRenderDevice
+    {
+        void* vfptr;                    // 0x00: vtable
+        uint32_t dwWidth;               // 0x04: Screen width
+        uint32_t dwHeight;              // 0x08: Screen height
+        uint32_t dwPrecacheFrame;       // 0x0C
+        uint32_t b_is_Ready;            // 0x10
+        uint32_t b_is_Active;           // 0x14
+        float fWidth_2;                 // 0x18
+        float fHeight_2;                // 0x1C
+        uint8_t pad_0020[0x10];         // 0x20 -> 0x30
+        Fvector vCameraPosition;        // 0x30
+        Fvector vCameraDirection;       // 0x3C
+        Fvector vCameraTop;             // 0x48
+        Fvector vCameraRight;           // 0x54
+        Fmatrix mView;                  // 0x60
+        Fmatrix mProject;               // 0xA0
+        Fmatrix mFullTransform;         // 0xE0
+        uint8_t pad_0120[0xCC];         // 0x120 -> 0x1EC
+        float fFOV;                     // 0x1EC
+        float fASPECT;                  // 0x1F0
+    };
+
+    struct CBoneInstance
+    {
+        Fmatrix mTransform;             // 0x00: Local bone transformation matrix (64 bytes)
+        uint8_t pad_bone[0x60];         // 0x40 -> 0xA0 (Total sizeof = 160 bytes = 0xA0)
+    };
+
+    struct CBoneData
+    {
+        void* vfptr;                    // 0x00: vtable
+        uint16_t bone_id;               // 0x04: self id
+        uint16_t parent_id;             // 0x06: parent bone ID (0xFFFF = root / no parent)
+        uint32_t pad08;                 // 0x08: parent pointer / pad
+        uintptr_t name;                 // 0x0C: shared_str
+    };
+
+    struct CKinematics
+    {
+        void* vfptr;                    // 0x00: Virtual method table
+        uint8_t pad04[0x24];            // 0x04 -> 0x28
+        CBoneInstance* bone_instances;  // 0x28: Array of bone instances
+        void* pBoneDatas;               // 0x2C: Pointer to vector (_first, _last, _end)
+        uint32_t pad30;                 // 0x30
+        uint16_t bone_count;            // 0x34: Direct verified count!
+
+        inline size_t GetBoneCount() const
+        {
+            __try
+            {
+                if (IsBadReadPtr(this, 0x40)) return 0;
+                if (bone_count > 0 && bone_count <= 128) return static_cast<size_t>(bone_count);
+                if (!pBoneDatas || IsBadReadPtr(pBoneDatas, 8)) return 0;
+                uintptr_t* pVec = reinterpret_cast<uintptr_t*>(pBoneDatas);
+                if (!pVec[0] || !pVec[1] || pVec[1] < pVec[0]) return 0;
+                size_t cnt = (pVec[1] - pVec[0]) / 4;
+                return (cnt <= 128) ? cnt : 0;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return 0;
+            }
+        }
+
+        inline CBoneData* GetBoneData(size_t index) const
+        {
+            __try
+            {
+                if (index >= GetBoneCount()) return nullptr;
+                if (!pBoneDatas || IsBadReadPtr(pBoneDatas, 8)) return nullptr;
+                CBoneData** pStart = *reinterpret_cast<CBoneData***>(pBoneDatas);
+                if (!pStart || IsBadReadPtr(pStart + index, sizeof(CBoneData*))) return nullptr;
+                return pStart[index];
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return nullptr;
+            }
+        }
+    };
+#else
     struct CRenderDevice
     {
         uint8_t pad_0000[0x100];
@@ -104,7 +194,6 @@ namespace XRay
         Fmatrix mFullTransform;         // 0x2BC
     };
 
-    // Bone kinematics data
     struct CBoneInstance
     {
         Fmatrix mTransform;             // 0x00: Local bone transformation matrix (64 bytes)
@@ -125,7 +214,18 @@ namespace XRay
         uint8_t pad04[0x80];            // 0x04 -> 0x84
         CBoneInstance* bone_instances;  // 0x84: Array of bone instances
         xr_vector<CBoneData*> bone_datas; // 0x88: Vector of bone descriptors
+
+        inline size_t GetBoneCount() const
+        {
+            return bone_datas.size();
+        }
+
+        inline CBoneData* GetBoneData(size_t index) const
+        {
+            return bone_datas.at(index);
+        }
     };
+#endif
 
     // Basic game object in X-Ray (1.0006 retail verified layout)
     struct CObject
